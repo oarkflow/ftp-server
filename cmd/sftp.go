@@ -1,6 +1,3 @@
-// An example SFTP server implementation using the golang SSH package.
-// Serves the whole filesystem visible to the user, and has a hard-coded username and password,
-// so not for real use!
 package main
 
 import (
@@ -123,3 +120,5 @@ func main() {
 		}
 	}
 }
+
+// https://stackoverflow.com/questions/76748705/go-sftp-server-exits-after-one-client-connection

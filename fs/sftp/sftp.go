@@ -4,12 +4,12 @@ package sftp
 import (
 	"fmt"
 	"net"
-	
+
 	"github.com/pkg/sftp"
 	"github.com/spf13/afero"
 	"github.com/spf13/afero/sftpfs"
 	"golang.org/x/crypto/ssh"
-	
+
 	"github.com/oarkflow/ftp-server/models"
 )
 
@@ -35,17 +35,17 @@ func LoadFs(access *models.Access) (afero.Fs, error) {
 			return nil
 		},
 	}
-	
+	fmt.Println("Host", par)
 	// Dial your ssh server.
 	conn, errSSH := ssh.Dial("tcp", par["hostname"], config)
 	if errSSH != nil {
 		return nil, &ConnectionError{Source: errSSH}
 	}
-	
+
 	client, errSftp := sftp.NewClient(conn)
 	if errSftp != nil {
 		return nil, &ConnectionError{Source: errSftp}
 	}
-	
+
 	return sftpfs.New(client), nil
 }

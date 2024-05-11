@@ -94,7 +94,7 @@ func (c *Config) Load() error {
 
 func (c *Config) HashPlaintextPasswords() error {
 
-	json, errReadFile := os.ReadFile(c.fileName)
+	jsonBt, errReadFile := os.ReadFile(c.fileName)
 	if errReadFile != nil {
 		c.logger.Error("Cannot read config file!", "err", errReadFile)
 		return errReadFile
@@ -110,17 +110,17 @@ func (c *Config) HashPlaintextPasswords() error {
 			//This password is not hashed
 			hash, errHash := bcrypt.GenerateFromPassword([]byte(a.Pass), 10)
 			if errHash == nil {
-				modified, errJsonSet := sjson.Set(string(json), "accesses."+fmt.Sprint(i)+".pass", string(hash))
+				modified, errJsonSet := sjson.Set(string(jsonBt), "accesses."+fmt.Sprint(i)+".pass", string(hash))
 				c.Content.Accesses[i].Pass = string(hash)
 				if errJsonSet == nil {
 					save = true
-					json = []byte(modified)
+					jsonBt = []byte(modified)
 				}
 			}
 		}
 	}
 	if save {
-		errWriteFile := os.WriteFile(c.fileName, json, 0644)
+		errWriteFile := os.WriteFile(c.fileName, jsonBt, 0644)
 		if errWriteFile != nil {
 			c.logger.Error("Cannot write config file!", "err", errWriteFile)
 			return errWriteFile

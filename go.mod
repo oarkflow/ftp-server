@@ -14,6 +14,7 @@ require (
 	github.com/sirupsen/logrus v1.9.3
 	github.com/spf13/afero v1.11.0
 	github.com/tidwall/sjson v1.2.5
+	go.uber.org/zap v1.27.0
 	golang.org/x/crypto v0.16.0
 	golang.org/x/oauth2 v0.15.0
 	golang.org/x/sys v0.20.0
@@ -35,6 +36,7 @@ require (
 	github.com/tidwall/match v1.1.1 // indirect
 	github.com/tidwall/pretty v1.2.1 // indirect
 	go.opencensus.io v0.24.0 // indirect
+	go.uber.org/multierr v1.10.0 // indirect
 	golang.org/x/net v0.19.0 // indirect
 	golang.org/x/text v0.15.0 // indirect
 	google.golang.org/api v0.152.0 // indirect

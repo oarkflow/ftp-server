@@ -1,4 +1,4 @@
-package server
+package ftp
 
 import (
 	"crypto/tls"
@@ -13,62 +13,62 @@ import (
 
 func (c *clientHandler) handlePORT(param string) error {
 	command := c.GetLastCommand()
-	
+
 	if c.server.settings.DisableActiveMode {
 		c.writeMessage(StatusServiceNotAvailable, fmt.Sprintf("%v command is disabled", command))
-		
+
 		return nil
 	}
-	
+
 	var err error
 	var raddr *net.TCPAddr
-	
+
 	if command == "EPRT" {
 		raddr, err = parseEPRTAddr(param)
 	} else { // PORT
 		raddr, err = parsePORTAddr(param)
 	}
-	
+
 	if err != nil {
 		c.writeMessage(StatusSyntaxErrorParameters, fmt.Sprintf("Problem parsing %s: %v", param, err))
-		
+
 		return nil
 	}
-	
+
 	err = c.checkDataConnectionRequirement(raddr.IP, DataChannelActive)
 	if err != nil {
 		// we don't want to expose the full error to the client, we just log it
 		c.logger.Warn("Could not validate active data connection requirement", "err", err)
 		c.writeMessage(StatusSyntaxErrorParameters, "Your request does not meet "+
 			"the configured security requirements")
-		
+
 		return nil
 	}
-	
+
 	var tlsConfig *tls.Config
-	
+
 	if c.HasTLSForTransfers() || c.server.settings.TLSRequired == ImplicitEncryption {
 		tlsConfig, err = c.getTLSConfig()
 		if err != nil {
 			c.writeMessage(StatusServiceNotAvailable, fmt.Sprintf("Cannot get a TLS config for active connection: %v", err))
-			
+
 			return nil
 		}
 	}
-	
+
 	c.transferMu.Lock()
-	
+
 	c.transfer = &activeTransferHandler{
 		raddr:     raddr,
 		settings:  c.server.settings,
 		tlsConfig: tlsConfig,
 	}
-	
+
 	c.transferMu.Unlock()
 	c.setLastDataChannel(DataChannelActive)
-	
+
 	c.writeMessage(StatusOK, command+" command successful")
-	
+
 	return nil
 }
 
@@ -92,24 +92,24 @@ func (a *activeTransferHandler) SetInfo(info string) {
 func (a *activeTransferHandler) Open() (net.Conn, error) {
 	timeout := time.Duration(time.Second.Nanoseconds() * int64(a.settings.ConnectionTimeout))
 	dialer := &net.Dialer{Timeout: timeout}
-	
+
 	if !a.settings.ActiveTransferPortNon20 {
 		dialer.LocalAddr, _ = net.ResolveTCPAddr("tcp", ":20")
 		dialer.Control = Control
 	}
-	
+
 	conn, err := dialer.Dial("tcp", a.raddr.String())
 	if err != nil {
 		return nil, newNetworkError("could not establish active connection", err)
 	}
-	
+
 	if a.tlsConfig != nil {
 		conn = tls.Server(conn, a.tlsConfig)
 	}
-	
+
 	// keep connection as it will be closed by Close()
 	a.conn = conn
-	
+
 	return a.conn, nil
 }
 
@@ -120,7 +120,7 @@ func (a *activeTransferHandler) Close() error {
 			return newNetworkError("could not close active connection", err)
 		}
 	}
-	
+
 	return nil
 }
 
@@ -139,28 +139,28 @@ func parsePORTAddr(param string) (*net.TCPAddr, error) {
 	if !remoteAddrRegex.MatchString(param) {
 		return nil, fmt.Errorf("could not parse %s: %w", param, ErrRemoteAddrFormat)
 	}
-	
+
 	params := strings.Split(param, ",")
-	
+
 	ipParts := strings.Join(params[0:4], ".")
-	
+
 	portByte1, err := strconv.Atoi(params[4])
 	if err != nil {
 		return nil, ErrRemoteAddrFormat
 	}
-	
+
 	portByte2, err := strconv.Atoi(params[5])
 	if err != nil {
 		return nil, ErrRemoteAddrFormat
 	}
-	
+
 	port := portByte1<<8 + portByte2
-	
+
 	addr, err := net.ResolveTCPAddr("tcp", fmt.Sprintf("%s:%d", ipParts, port))
 	if err != nil {
 		err = newNetworkError("could not resolve "+param, err)
 	}
-	
+
 	return addr, err
 }
 
@@ -170,24 +170,24 @@ func parsePORTAddr(param string) (*net.TCPAddr, error) {
 func parseEPRTAddr(param string) (*net.TCPAddr, error) {
 	var addr *net.TCPAddr
 	var err error
-	
+
 	params := strings.Split(param, "|")
 	if len(params) != 5 {
 		return nil, ErrRemoteAddrFormat
 	}
-	
+
 	netProtocol := params[1]
 	remoteIP := params[2]
 	remotePort := params[3]
-	
+
 	// check port is valid
 	var portI int
 	if portI, err = strconv.Atoi(remotePort); err != nil || portI <= 0 || portI > 65535 {
 		return nil, ErrRemoteAddrFormat
 	}
-	
+
 	var ipAddress net.IP
-	
+
 	switch netProtocol {
 	case "1", "2":
 		// use protocol 1 means IPv4. 2 means IPv6
@@ -199,11 +199,11 @@ func parseEPRTAddr(param string) (*net.TCPAddr, error) {
 		// wrong network protocol
 		return nil, ErrRemoteAddrFormat
 	}
-	
+
 	addr, err = net.ResolveTCPAddr("tcp", net.JoinHostPort(ipAddress.String(), strconv.Itoa(portI)))
 	if err != nil {
 		err = newNetworkError(fmt.Sprintf("could not resolve addr %v:%v", ipAddress, portI), err)
 	}
-	
+
 	return addr, err
 }

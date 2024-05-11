@@ -1,4 +1,4 @@
-package server
+package ftp
 
 import (
 	"bufio"
@@ -10,7 +10,7 @@ type convertMode int8
 const (
 	convertModeToCRLF convertMode = iota
 	convertModeToLF
-	
+
 	bufferSize = 4096
 )
 
@@ -22,7 +22,7 @@ type asciiConverter struct {
 
 func newASCIIConverter(r io.Reader, mode convertMode) *asciiConverter {
 	reader := bufio.NewReaderSize(r, bufferSize)
-	
+
 	return &asciiConverter{
 		reader:    reader,
 		mode:      mode,
@@ -34,7 +34,7 @@ func (c *asciiConverter) Read(bytes []byte) (int, error) {
 	var data []byte
 	var readBytes int
 	var err error
-	
+
 	if len(c.remaining) > 0 {
 		data = c.remaining
 		c.remaining = nil
@@ -44,20 +44,20 @@ func (c *asciiConverter) Read(bytes []byte) (int, error) {
 			return readBytes, err
 		}
 	}
-	
+
 	readBytes = len(data)
 	if readBytes > 0 {
 		maxSize := len(bytes) - 2
 		if readBytes > maxSize {
 			copy(bytes, data[:maxSize])
 			c.remaining = data[maxSize:]
-			
+
 			return maxSize, nil
 		}
-		
+
 		copy(bytes[:readBytes], data[:readBytes])
 	}
-	
+
 	// we can have a partial read if the line is too long
 	// or a trailing line without a line ending, so we check
 	// the last byte to decide if we need to add a line ending.
@@ -70,9 +70,9 @@ func (c *asciiConverter) Read(bytes []byte) (int, error) {
 	if err != nil {
 		return readBytes, err
 	}
-	
+
 	lastByte, err := c.reader.ReadByte()
-	
+
 	if err == nil && lastByte == '\n' {
 		switch c.mode {
 		case convertModeToCRLF:
@@ -84,6 +84,6 @@ func (c *asciiConverter) Read(bytes []byte) (int, error) {
 			readBytes++
 		}
 	}
-	
+
 	return readBytes, err //nolint:wrapcheck // here wrapping errors brings nothing
 }

@@ -1,4 +1,4 @@
-package server
+package ftp
 
 import (
 	"bufio"
@@ -12,7 +12,7 @@ import (
 	"strings"
 	"sync"
 	"time"
-	
+
 	"github.com/fclairamb/go-log"
 )
 
@@ -74,20 +74,20 @@ func getHashMapping() map[string]HASHAlgo {
 	mapping["SHA-1"] = HASHAlgoSHA1
 	mapping["SHA-256"] = HASHAlgoSHA256
 	mapping["SHA-512"] = HASHAlgoSHA512
-	
+
 	return mapping
 }
 
 func getHashName(algo HASHAlgo) string {
 	hashName := ""
 	hashMapping := getHashMapping()
-	
+
 	for k, v := range hashMapping {
 		if v == algo {
 			hashName = k
 		}
 	}
-	
+
 	return hashName
 }
 
@@ -162,24 +162,24 @@ func (c *clientHandler) getTLSConfig() (*tls.Config, error) {
 		if c.tlsConfig != nil {
 			return c.tlsConfig, nil
 		}
-		
+
 		resumptionID, err := generateSessionResumptionID()
 		if err != nil {
 			return nil, err
 		}
-		
+
 		c.resumptionID = resumptionID
-		
+
 		config, err := c.server.driver.GetTLSConfig()
 		if err != nil {
 			return nil, err
 		}
-		
+
 		c.addTLSReuseCallbacks(config)
-		
+
 		return c.tlsConfig, nil
 	}
-	
+
 	return c.server.driver.GetTLSConfig()
 }
 
@@ -187,65 +187,65 @@ func (c *clientHandler) addTLSReuseCallbacks(config *tls.Config) {
 	c.tlsConfig = config.Clone()
 	c.tlsConfig.WrapSession = func(connectionState tls.ConnectionState, sessionState *tls.SessionState) ([]byte, error) {
 		c.logger.Debug("wrap session", "resumption action", c.resumptionAction, "did resume", connectionState.DidResume)
-		
+
 		if c.resumptionAction == resumptionActionAdd || connectionState.DidResume {
 			for _, extra := range sessionState.Extra {
 				if bytes.HasPrefix(extra, resumptionIDPrefix) {
 					c.logger.Error("resumption ID already set")
-					
+
 					return nil, fmt.Errorf("%w: reuse ID already set", errReuse)
 				}
 			}
-			
+
 			c.logger.Debug("adding resumption id to TLS session state", "resumption action", c.resumptionAction,
 				"did resume", connectionState.DidResume)
-			
+
 			sessionState.Extra = append(sessionState.Extra, c.resumptionID)
 		}
-		
+
 		return c.tlsConfig.EncryptTicket(connectionState, sessionState)
 	}
-	
+
 	c.tlsConfig.UnwrapSession = func(identity []byte, connectionState tls.ConnectionState) (*tls.SessionState, error) {
 		c.logger.Debug("unwrap session", "resumption action", c.resumptionAction, "did resume", connectionState.DidResume)
-		
+
 		state, err := c.tlsConfig.DecryptTicket(identity, connectionState)
 		if err == nil && c.resumptionAction == resumptionActionCheck {
 			if state == nil {
 				c.logger.Error("invalid TLS ticket, state is nil")
-				
+
 				return nil, fmt.Errorf("%w: invalid TLS session", errReuse)
 			}
-			
+
 			for _, extra := range state.Extra {
 				if bytes.Equal(extra, c.resumptionID) {
 					return state, nil
 				}
 			}
-			
+
 			c.logger.Error("resumption id mismatch or not set", "TLS session extra data len", len(state.Extra))
-			
+
 			return nil, fmt.Errorf("%w: reuse ID mismatch or not set", errReuse)
 		}
-		
+
 		return state, err
 	}
-	
+
 	c.tlsConfig.VerifyConnection = func(connectionState tls.ConnectionState) error {
 		c.logger.Debug("verify connection", "resumption action", c.resumptionAction, "did resume", connectionState.DidResume)
-		
+
 		if c.resumptionAction == resumptionActionCheck {
 			if !connectionState.DidResume {
 				c.logger.Error("TLS session of data connection not reused")
-				
+
 				return fmt.Errorf("%w: TLS session of data connection not reused", errReuse)
 			}
 		}
-		
+
 		if verifier, ok := c.server.driver.(MainDriverExtensionTLSConnectionStateVerifier); ok {
 			return verifier.VerifyTLSConnectionState(c, connectionState)
 		}
-		
+
 		return nil
 	}
 }
@@ -254,7 +254,7 @@ func (c *clientHandler) addTLSReuseCallbacks(config *tls.Config) {
 func (c *clientHandler) Path() string {
 	c.paramsMutex.RLock()
 	defer c.paramsMutex.RUnlock()
-	
+
 	return c.path
 }
 
@@ -262,7 +262,7 @@ func (c *clientHandler) Path() string {
 func (c *clientHandler) SetPath(value string) {
 	c.paramsMutex.Lock()
 	defer c.paramsMutex.Unlock()
-	
+
 	c.path = value
 }
 
@@ -270,7 +270,7 @@ func (c *clientHandler) SetPath(value string) {
 func (c *clientHandler) getListPath() string {
 	c.paramsMutex.RLock()
 	defer c.paramsMutex.RUnlock()
-	
+
 	return c.listPath
 }
 
@@ -278,7 +278,7 @@ func (c *clientHandler) getListPath() string {
 func (c *clientHandler) SetListPath(value string) {
 	c.paramsMutex.Lock()
 	defer c.paramsMutex.Unlock()
-	
+
 	c.listPath = value
 }
 
@@ -286,7 +286,7 @@ func (c *clientHandler) SetListPath(value string) {
 func (c *clientHandler) Debug() bool {
 	c.paramsMutex.RLock()
 	defer c.paramsMutex.RUnlock()
-	
+
 	return c.debug
 }
 
@@ -294,7 +294,7 @@ func (c *clientHandler) Debug() bool {
 func (c *clientHandler) SetDebug(debug bool) {
 	c.paramsMutex.Lock()
 	defer c.paramsMutex.Unlock()
-	
+
 	c.debug = debug
 }
 
@@ -317,14 +317,14 @@ func (c *clientHandler) LocalAddr() net.Addr {
 func (c *clientHandler) GetClientVersion() string {
 	c.paramsMutex.RLock()
 	defer c.paramsMutex.RUnlock()
-	
+
 	return c.clnt
 }
 
 func (c *clientHandler) setClientVersion(value string) {
 	c.paramsMutex.Lock()
 	defer c.paramsMutex.Unlock()
-	
+
 	c.clnt = value
 }
 
@@ -333,17 +333,17 @@ func (c *clientHandler) HasTLSForControl() bool {
 	if c.server.settings.TLSRequired == ImplicitEncryption {
 		return true
 	}
-	
+
 	c.paramsMutex.RLock()
 	defer c.paramsMutex.RUnlock()
-	
+
 	return c.controlTLS
 }
 
 func (c *clientHandler) setTLSForControl(value bool) {
 	c.paramsMutex.Lock()
 	defer c.paramsMutex.Unlock()
-	
+
 	c.controlTLS = value
 }
 
@@ -352,10 +352,10 @@ func (c *clientHandler) HasTLSForTransfers() bool {
 	if c.server.settings.TLSRequired == ImplicitEncryption {
 		return true
 	}
-	
+
 	c.paramsMutex.RLock()
 	defer c.paramsMutex.RUnlock()
-	
+
 	return c.transferTLS
 }
 
@@ -370,7 +370,7 @@ func (c *clientHandler) Extra() any {
 func (c *clientHandler) setTLSForTransfer(value bool) {
 	c.paramsMutex.Lock()
 	defer c.paramsMutex.Unlock()
-	
+
 	c.transferTLS = value
 }
 
@@ -379,12 +379,12 @@ func (c *clientHandler) SetTLSRequirement(requirement TLSRequirement) error {
 	if requirement < ClearOrEncrypted || requirement > MandatoryEncryption {
 		return errInvalidTLSRequirement
 	}
-	
+
 	c.paramsMutex.Lock()
 	defer c.paramsMutex.Unlock()
-	
+
 	c.tlsRequirement = requirement
-	
+
 	return nil
 }
 
@@ -392,10 +392,10 @@ func (c *clientHandler) isTLSRequired() bool {
 	if c.server.settings.TLSRequired == MandatoryEncryption {
 		return true
 	}
-	
+
 	c.paramsMutex.RLock()
 	defer c.paramsMutex.RUnlock()
-	
+
 	return c.tlsRequirement == MandatoryEncryption
 }
 
@@ -403,7 +403,7 @@ func (c *clientHandler) isTLSRequired() bool {
 func (c *clientHandler) GetLastCommand() string {
 	c.paramsMutex.RLock()
 	defer c.paramsMutex.RUnlock()
-	
+
 	return c.command
 }
 
@@ -411,21 +411,21 @@ func (c *clientHandler) GetLastCommand() string {
 func (c *clientHandler) GetLastDataChannel() DataChannel {
 	c.paramsMutex.RLock()
 	defer c.paramsMutex.RUnlock()
-	
+
 	return c.lastDataChannel
 }
 
 func (c *clientHandler) setLastCommand(cmd string) {
 	c.paramsMutex.Lock()
 	defer c.paramsMutex.Unlock()
-	
+
 	c.command = cmd
 }
 
 func (c *clientHandler) setLastDataChannel(channel DataChannel) {
 	c.paramsMutex.Lock()
 	defer c.paramsMutex.Unlock()
-	
+
 	c.lastDataChannel = channel
 }
 
@@ -435,16 +435,16 @@ func (c *clientHandler) closeTransfer() error {
 		err = c.transfer.Close()
 		c.isTransferOpen = false
 		c.transfer = nil
-		
+
 		if c.debug {
 			c.logger.Debug("Transfer connection closed")
 		}
 	}
-	
+
 	if err != nil {
 		err = fmt.Errorf("error closing transfer connection: %w", err)
 	}
-	
+
 	return err
 }
 
@@ -452,18 +452,18 @@ func (c *clientHandler) closeTransfer() error {
 func (c *clientHandler) Close() error {
 	c.transferMu.Lock()
 	defer c.transferMu.Unlock()
-	
+
 	// set isTransferAborted to true so any transfer in progress will not try to write
 	// to the closed connection on transfer close
 	c.isTransferAborted = true
-	
+
 	if err := c.closeTransfer(); err != nil {
 		c.logger.Warn(
 			"Problem closing a transfer on external close request",
 			"err", err,
 		)
 	}
-	
+
 	// don't be tempted to send a message to the client before
 	// closing the connection:
 	//
@@ -475,24 +475,24 @@ func (c *clientHandler) Close() error {
 	if err != nil {
 		err = newNetworkError("error closing control connection", err)
 	}
-	
+
 	return err
 }
 
 func (c *clientHandler) end() {
 	c.server.driver.ClientDisconnected(c)
 	c.server.clientDeparture(c)
-	
+
 	if err := c.conn.Close(); err != nil {
 		c.logger.Debug(
 			"Problem closing control connection",
 			"err", err,
 		)
 	}
-	
+
 	c.transferMu.Lock()
 	defer c.transferMu.Unlock()
-	
+
 	if err := c.closeTransfer(); err != nil {
 		c.logger.Warn(
 			"Problem closing a transfer",
@@ -504,22 +504,22 @@ func (c *clientHandler) end() {
 func (c *clientHandler) isCommandAborted() bool {
 	c.transferMu.Lock()
 	defer c.transferMu.Unlock()
-	
+
 	return c.isTransferAborted
 }
 
 // HandleCommands reads the stream of commands
 func (c *clientHandler) HandleCommands() {
 	defer c.end()
-	
+
 	if msg, err := c.server.driver.ClientConnected(c); err == nil {
 		c.writeMessage(StatusServiceReady, msg)
 	} else {
 		c.writeMessage(StatusSyntaxErrorNotRecognised, msg)
-		
+
 		return
 	}
-	
+
 	for {
 		if c.readCommand() {
 			return
@@ -532,10 +532,10 @@ func (c *clientHandler) readCommand() bool {
 		if c.debug {
 			c.logger.Debug("Client disconnected", "clean", true)
 		}
-		
+
 		return true
 	}
-	
+
 	// florent(2018-01-14): #58: IDLE timeout: Preparing the deadline before we read
 	if c.server.settings.IdleTimeout > 0 {
 		if err := c.conn.SetDeadline(
@@ -543,32 +543,32 @@ func (c *clientHandler) readCommand() bool {
 			c.logger.Error("Network error", "err", err)
 		}
 	}
-	
+
 	lineSlice, isPrefix, err := c.reader.ReadLine()
-	
+
 	if isPrefix {
 		if c.debug {
 			c.logger.Warn("Received line too long, disconnecting client",
 				"size", len(lineSlice))
 		}
-		
+
 		return true
 	}
-	
+
 	if err != nil {
 		c.handleCommandsStreamError(err)
-		
+
 		return true
 	}
-	
+
 	line := string(lineSlice)
-	
+
 	if c.debug {
 		c.logger.Debug("Received line", "line", line)
 	}
-	
+
 	c.handleCommand(line)
-	
+
 	return false
 }
 
@@ -581,19 +581,19 @@ func (c *clientHandler) handleCommandsStreamError(err error) {
 			if errSet := c.conn.SetDeadline(time.Now().Add(time.Minute)); errSet != nil {
 				c.logger.Error("Could not set read deadline", "err", errSet)
 			}
-			
+
 			c.logger.Info("Client IDLE timeout", "err", err)
 			c.writeMessage(
 				StatusServiceNotAvailable,
 				fmt.Sprintf("command timeout (%d seconds): closing control connection", c.server.settings.IdleTimeout))
-			
+
 			if errFlush := c.writer.Flush(); errFlush != nil {
 				c.logger.Error("Flush error", "err", errFlush)
 			}
-			
+
 			return
 		}
-		
+
 		c.logger.Error("Network error", "err", err)
 	} else {
 		if errors.Is(err, io.EOF) {
@@ -610,7 +610,7 @@ func (c *clientHandler) handleCommandsStreamError(err error) {
 func (c *clientHandler) handleCommand(line string) {
 	command, param := parseLine(line)
 	command = strings.ToUpper(command)
-	
+
 	cmdDesc := commandsMap[command]
 	if cmdDesc == nil {
 		// Search among commands having a "special semantic". They
@@ -622,26 +622,26 @@ func (c *clientHandler) handleCommand(line string) {
 			if strings.HasSuffix(command, cmd) {
 				cmdDesc = commandsMap[cmd]
 				command = cmd
-				
+
 				break
 			}
 		}
-		
+
 		if cmdDesc == nil {
 			c.logger.Warn("Unknown command", "command", command)
 			c.setLastCommand(command)
 			c.writeMessage(StatusSyntaxErrorNotRecognised, fmt.Sprintf("Unknown command %#v", command))
-			
+
 			return
 		}
 	}
-	
+
 	if c.driver == nil && !cmdDesc.Open {
 		c.writeMessage(StatusNotLoggedIn, "Please login with USER and PASS")
-		
+
 		return
 	}
-	
+
 	// All commands are serialized except the ones that require special action.
 	// Special action commands are not executed in a separate goroutine so we can
 	// have at most one command that can open a transfer connection and one special
@@ -650,9 +650,9 @@ func (c *clientHandler) handleCommand(line string) {
 	if !cmdDesc.SpecialAction || (command == "STAT" && param != "") {
 		c.transferWg.Wait()
 	}
-	
+
 	c.setLastCommand(command)
-	
+
 	if cmdDesc.TransferRelated {
 		// these commands will be started in a separate goroutine so
 		// they can be aborted.
@@ -665,12 +665,12 @@ func (c *clientHandler) handleCommand(line string) {
 		// A lock is not required here, we cannot have another concurrent ABOR
 		// or transfer active here
 		c.isTransferAborted = false
-		
+
 		c.transferWg.Add(1)
-		
+
 		go func(cmd, param string) {
 			defer c.transferWg.Done()
-			
+
 			c.executeCommandFn(cmdDesc, cmd, param)
 		}(command, param)
 	} else {
@@ -691,7 +691,7 @@ func (c *clientHandler) executeCommandFn(cmdDesc *CommandDescription, command, p
 			)
 		}
 	}()
-	
+
 	if err := cmdDesc.Fn(c, param); err != nil {
 		c.writeMessage(StatusSyntaxErrorNotRecognised, fmt.Sprintf("Error: %s", err))
 	}
@@ -701,7 +701,7 @@ func (c *clientHandler) writeLine(line string) {
 	if c.debug {
 		c.logger.Debug("Sending answer", "line", line)
 	}
-	
+
 	if _, err := fmt.Fprintf(c.writer, "%s\r\n", line); err != nil {
 		c.logger.Warn(
 			"Answer couldn't be sent",
@@ -709,7 +709,7 @@ func (c *clientHandler) writeLine(line string) {
 			"err", err,
 		)
 	}
-	
+
 	if err := c.writer.Flush(); err != nil {
 		c.logger.Warn(
 			"Couldn't flush line",
@@ -720,7 +720,7 @@ func (c *clientHandler) writeLine(line string) {
 
 func (c *clientHandler) writeMessage(code int, message string) {
 	lines := getMessageLines(message)
-	
+
 	for idx, line := range lines {
 		if idx < len(lines)-1 {
 			c.writeLine(fmt.Sprintf("%d-%s", code, line))
@@ -734,65 +734,65 @@ func (c *clientHandler) GetTranferInfo() string {
 	if c.transfer == nil {
 		return ""
 	}
-	
+
 	return c.transfer.GetInfo()
 }
 
 func (c *clientHandler) TransferOpen(info string) (net.Conn, error) {
 	c.transferMu.Lock()
 	defer c.transferMu.Unlock()
-	
+
 	if c.transfer == nil {
 		// a transfer could be aborted before it is opened, in this case no response should be returned
 		if c.isTransferAborted {
 			c.isTransferAborted = false
-			
+
 			return nil, errNoTransferConnection
 		}
-		
+
 		c.writeMessage(StatusActionNotTaken, errNoTransferConnection.Error())
-		
+
 		return nil, errNoTransferConnection
 	}
-	
+
 	if c.isTLSRequired() && !c.HasTLSForTransfers() {
 		c.writeMessage(StatusServiceNotAvailable, errTLSRequired.Error())
-		
+
 		return nil, errTLSRequired
 	}
-	
+
 	conn, err := c.transfer.Open()
 	if err != nil {
 		c.logger.Warn(
 			"Unable to open transfer",
 			"error", err)
-		
+
 		c.writeMessage(StatusCannotOpenDataConnection, err.Error())
-		
+
 		err = newNetworkError("Unable to open transfer", err)
-		
+
 		return nil, err
 	}
-	
+
 	c.isTransferOpen = true
 	c.transfer.SetInfo(info)
-	
+
 	c.writeMessage(StatusFileStatusOK, "Using transfer connection")
-	
+
 	if c.debug {
 		c.logger.Debug(
 			"Transfer connection opened",
 			"remoteAddr", conn.RemoteAddr().String(),
 			"localAddr", conn.LocalAddr().String())
 	}
-	
+
 	return conn, nil
 }
 
 func (c *clientHandler) TransferClose(err error) {
 	c.transferMu.Lock()
 	defer c.transferMu.Unlock()
-	
+
 	errClose := c.closeTransfer()
 	if errClose != nil {
 		c.logger.Warn(
@@ -800,14 +800,14 @@ func (c *clientHandler) TransferClose(err error) {
 			"err", err,
 		)
 	}
-	
+
 	// if the transfer was aborted we don't have to send a response
 	if c.isTransferAborted {
 		c.isTransferAborted = false
-		
+
 		return
 	}
-	
+
 	switch {
 	case err == nil && errClose == nil:
 		c.writeMessage(StatusClosingDataConn, "Closing transfer connection")
@@ -820,27 +820,27 @@ func (c *clientHandler) TransferClose(err error) {
 
 func (c *clientHandler) checkDataConnectionRequirement(dataConnIP net.IP, channelType DataChannel) error {
 	var requirement DataConnectionRequirement
-	
+
 	switch channelType {
 	case DataChannelActive:
 		requirement = c.server.settings.ActiveConnectionsCheck
 	case DataChannelPassive:
 		requirement = c.server.settings.PasvConnectionsCheck
 	}
-	
+
 	switch requirement {
 	case IPMatchRequired:
 		controlConnIP, err := getIPFromRemoteAddr(c.RemoteAddr())
 		if err != nil {
 			return err
 		}
-		
+
 		if !controlConnIP.Equal(dataConnIP) {
 			return &ipValidationError{error: fmt.Sprintf("data connection ip address %v "+
 				"does not match control connection ip address %v",
 				dataConnIP, controlConnIP)}
 		}
-		
+
 		return nil
 	case IPMatchDisabled:
 		return nil
@@ -854,17 +854,17 @@ func getIPFromRemoteAddr(remoteAddr net.Addr) (net.IP, error) {
 	if remoteAddr == nil {
 		return nil, &ipValidationError{error: "nil remote address"}
 	}
-	
+
 	ipAddress, _, err := net.SplitHostPort(remoteAddr.String())
 	if err != nil {
 		return nil, fmt.Errorf("error parsing remote address: %w", err)
 	}
-	
+
 	remoteIP := net.ParseIP(ipAddress)
 	if remoteIP == nil {
 		return nil, &ipValidationError{error: fmt.Sprintf("invalid remote IP: %v", ipAddress)}
 	}
-	
+
 	return remoteIP, nil
 }
 
@@ -873,13 +873,13 @@ func parseLine(line string) (string, string) {
 	if len(params) == 1 {
 		return params[0], ""
 	}
-	
+
 	return params[0], params[1]
 }
 
 func (c *clientHandler) multilineAnswer(code int, message string) func() {
 	c.writeLine(fmt.Sprintf("%d-%s", code, message))
-	
+
 	return func() {
 		c.writeLine(fmt.Sprintf("%d End", code))
 	}
@@ -888,15 +888,15 @@ func (c *clientHandler) multilineAnswer(code int, message string) func() {
 func getMessageLines(message string) []string {
 	lines := make([]string, 0, 1)
 	sc := bufio.NewScanner(strings.NewReader(message))
-	
+
 	for sc.Scan() {
 		lines = append(lines, sc.Text())
 	}
-	
+
 	if len(lines) == 0 {
 		lines = append(lines, "")
 	}
-	
+
 	return lines
 }
 
@@ -905,6 +905,6 @@ func generateSessionResumptionID() ([]byte, error) {
 	if _, err := io.ReadFull(rand.Reader, b); err != nil {
 		return nil, err
 	}
-	
+
 	return append(resumptionIDPrefix, b...), nil
 }

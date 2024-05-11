@@ -15,8 +15,8 @@ import (
 	"github.com/oarkflow/ftp-server/config"
 	"github.com/oarkflow/ftp-server/fs"
 	"github.com/oarkflow/ftp-server/fs/fslog"
+	"github.com/oarkflow/ftp-server/ftp"
 	"github.com/oarkflow/ftp-server/models"
-	"github.com/oarkflow/ftp-server/server"
 )
 
 // Server structure
@@ -62,19 +62,19 @@ func NewServer(config *config.Config, logger log.Logger) (*Server, error) {
 }
 
 // GetSettings returns some general settings around the server setup
-func (s *Server) GetSettings() (*server.Settings, error) {
+func (s *Server) GetSettings() (*ftp.Settings, error) {
 	conf := s.config.Content
 
-	var portRange *server.PortRange
+	var portRange *ftp.PortRange
 
 	if conf.PassiveTransferPortRange != nil {
-		portRange = &server.PortRange{
+		portRange = &ftp.PortRange{
 			Start: conf.PassiveTransferPortRange.Start,
 			End:   conf.PassiveTransferPortRange.End,
 		}
 	}
 
-	return &server.Settings{
+	return &ftp.Settings{
 		ListenAddr:               conf.ListenAddress,
 		PublicHost:               conf.PublicHost,
 		PassiveTransferPortRange: portRange,
@@ -82,7 +82,7 @@ func (s *Server) GetSettings() (*server.Settings, error) {
 }
 
 // ClientConnected is called to send the very first welcome message
-func (s *Server) ClientConnected(cc server.ClientContext) (string, error) {
+func (s *Server) ClientConnected(cc ftp.ClientContext) (string, error) {
 	s.nbClientsSync.Lock()
 	defer s.nbClientsSync.Unlock()
 	s.nbClients++
@@ -101,7 +101,7 @@ func (s *Server) ClientConnected(cc server.ClientContext) (string, error) {
 }
 
 // ClientDisconnected is called when the user disconnects, even if he never authenticated
-func (s *Server) ClientDisconnected(cc server.ClientContext) {
+func (s *Server) ClientDisconnected(cc ftp.ClientContext) {
 	s.nbClientsSync.Lock()
 	defer s.nbClientsSync.Unlock()
 
@@ -166,7 +166,7 @@ func (s *Server) loadFs(access *models.Access) (afero.Fs, error) {
 }
 
 // AuthUser authenticates the user and selects an handling driver
-func (s *Server) AuthUser(cc server.ClientContext, user, pass string) (server.ClientDriver, error) {
+func (s *Server) AuthUser(cc ftp.ClientContext, user, pass string) (ftp.ClientDriver, error) {
 	access, errAccess := s.config.GetAccess(user, pass)
 	if errAccess != nil {
 		return nil, errAccess

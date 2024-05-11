@@ -1,4 +1,4 @@
-package server
+package ftp
 
 import (
 	"crypto/md5"  //nolint:gosec
@@ -23,21 +23,21 @@ import (
 func (c *clientHandler) handleSTOR(param string) error {
 	info := fmt.Sprintf("STOR %v", param)
 	c.transferFile(true, false, param, info)
-	
+
 	return nil
 }
 
 func (c *clientHandler) handleAPPE(param string) error {
 	info := fmt.Sprintf("APPE %v", param)
 	c.transferFile(true, true, param, info)
-	
+
 	return nil
 }
 
 func (c *clientHandler) handleRETR(param string) error {
 	info := fmt.Sprintf("RETR %v", param)
 	c.transferFile(false, false, param, info)
-	
+
 	return nil
 }
 
@@ -47,9 +47,9 @@ func (c *clientHandler) transferFile(write bool, appendFile bool, param, info st
 	var file FileTransfer
 	var err error
 	var fileFlag int
-	
+
 	path := c.absPath(param)
-	
+
 	// We try to open the file
 	if write { //nolint:nestif // too much effort to change for now
 		fileFlag = os.O_WRONLY
@@ -68,25 +68,25 @@ func (c *clientHandler) transferFile(write bool, appendFile bool, param, info st
 	} else {
 		fileFlag = os.O_RDONLY
 	}
-	
+
 	file, err = c.getFileHandle(path, fileFlag, c.ctxRest)
 	// If this fail, can stop right here and reset the seek position
 	if err != nil {
 		if !c.isCommandAborted() {
 			c.writeMessage(getErrorCode(err, StatusActionNotTaken), "Could not access file: "+err.Error())
 		}
-		
+
 		c.ctxRest = 0
-		
+
 		return
 	}
-	
+
 	// Try to seek on it
 	if c.ctxRest != 0 {
 		_, err = file.Seek(c.ctxRest, 0)
 		// Whatever happens we should reset the seek position
 		c.ctxRest = 0
-		
+
 		if err != nil {
 			// if we are unable to seek we can stop right here and close the file
 			if !c.isCommandAborted() {
@@ -94,11 +94,11 @@ func (c *clientHandler) transferFile(write bool, appendFile bool, param, info st
 			}
 			// we can ignore the close error here
 			c.closeUnchecked(file)
-			
+
 			return
 		}
 	}
-	
+
 	fileTransferConn, err := c.TransferOpen(info)
 	if err != nil {
 		if fileTransferError, ok := file.(FileTransferError); ok {
@@ -107,16 +107,16 @@ func (c *clientHandler) transferFile(write bool, appendFile bool, param, info st
 		// an error is already returned to the FTP client
 		// we can stop right here and close the file ignoring close error if any
 		c.closeUnchecked(file)
-		
+
 		return
 	}
-	
+
 	err = c.doFileTransfer(fileTransferConn, file, write)
 	// we ignore close error for reads
 	if errClose := file.Close(); errClose != nil && err == nil && write {
 		err = errClose
 	}
-	
+
 	// closing the transfer we also send the response message to the FTP client
 	c.TransferClose(err)
 }
@@ -125,14 +125,14 @@ func (c *clientHandler) doFileTransfer(transferConn net.Conn, file io.ReadWriter
 	var err error
 	var reader io.Reader
 	var writer io.Writer
-	
+
 	conversionMode := convertModeToCRLF
-	
+
 	// Copy the data
 	if write { // ... from the connection to the file
 		reader = transferConn
 		writer = file
-		
+
 		if runtime.GOOS != "windows" {
 			conversionMode = convertModeToLF
 		}
@@ -140,11 +140,11 @@ func (c *clientHandler) doFileTransfer(transferConn net.Conn, file io.ReadWriter
 		reader = file
 		writer = transferConn
 	}
-	
+
 	if c.currentTransferType == TransferTypeASCII {
 		reader = newASCIIConverter(reader, conversionMode)
 	}
-	
+
 	// for reads io.EOF isn't an error, for writes it must be considered an error
 	if written, errCopy := io.Copy(writer, reader); errCopy != nil && (!errors.Is(errCopy, io.EOF) || write) {
 		err = errCopy
@@ -153,20 +153,20 @@ func (c *clientHandler) doFileTransfer(transferConn net.Conn, file io.ReadWriter
 			"Stream copy finished",
 			"writtenBytes", written,
 		)
-		
+
 		if written == 0 {
 			err = checkHandshake(transferConn)
 		}
 	}
-	
+
 	if err != nil {
 		if fileTransferError, ok := file.(FileTransferError); ok {
 			fileTransferError.TransferError(err)
 		}
-		
+
 		err = newNetworkError("error transferring data", err)
 	}
-	
+
 	return err
 }
 
@@ -174,19 +174,19 @@ func (c *clientHandler) handleCOMB(param string) error {
 	if !c.server.settings.EnableCOMB {
 		// if disabled the client should not arrive here as COMB support is not declared in the FEAT response
 		c.writeMessage(StatusCommandNotImplemented, "COMB support is disabled")
-		
+
 		return nil
 	}
-	
+
 	relativePaths, err := unquoteSpaceSeparatedParams(param)
 	if err != nil || len(relativePaths) < 2 {
 		c.writeMessage(StatusSyntaxErrorParameters, fmt.Sprintf("invalid COMB parameters: %v", param))
-		
+
 		return nil //nolint:nilerr
 	}
-	
+
 	targetPath := c.absPath(relativePaths[0])
-	
+
 	sourcePaths := make([]string, 0, len(relativePaths)-1)
 	for _, src := range relativePaths[1:] {
 		sourcePaths = append(sourcePaths, c.absPath(src))
@@ -196,19 +196,19 @@ func (c *clientHandler) handleCOMB(param string) error {
 	_, err = c.driver.Stat(targetPath)
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		c.writeMessage(StatusActionNotTaken, fmt.Sprintf("Could not access file %#v: %v", targetPath, err))
-		
+
 		return nil
 	}
-	
+
 	fileFlag := os.O_WRONLY
 	if errors.Is(err, os.ErrNotExist) {
 		fileFlag |= os.O_CREATE
 	} else {
 		fileFlag |= os.O_APPEND
 	}
-	
+
 	c.combineFiles(targetPath, fileFlag, sourcePaths)
-	
+
 	return nil
 }
 
@@ -216,92 +216,92 @@ func (c *clientHandler) combineFiles(targetPath string, fileFlag int, sourcePath
 	file, err := c.getFileHandle(targetPath, fileFlag, 0)
 	if err != nil {
 		c.writeMessage(getErrorCode(err, StatusActionNotTaken), fmt.Sprintf("Could not access file %#v: %v", targetPath, err))
-		
+
 		return
 	}
-	
+
 	for _, partial := range sourcePaths {
 		var src FileTransfer
-		
+
 		src, err = c.getFileHandle(partial, os.O_RDONLY, 0)
 		if err != nil {
 			c.closeUnchecked(file)
 			c.writeMessage(getErrorCode(err, StatusActionNotTaken), fmt.Sprintf("Could not access file %#v: %v", partial, err))
-			
+
 			return
 		}
-		
+
 		_, err = io.Copy(file, src)
 		if err != nil {
 			c.closeUnchecked(src)
 			c.closeUnchecked(file)
 			c.writeMessage(getErrorCode(err, StatusActionNotTaken), fmt.Sprintf("Could not combine file %#v: %v", partial, err))
-			
+
 			return
 		}
-		
+
 		c.closeUnchecked(src)
-		
+
 		err = c.driver.Remove(partial)
 		if err != nil {
 			c.closeUnchecked(file)
 			c.writeMessage(StatusActionNotTaken, fmt.Sprintf("Could not delete file %#v after combine: %v", partial, err))
-			
+
 			return
 		}
 	}
-	
+
 	err = file.Close()
 	if err != nil {
 		c.writeMessage(StatusActionNotTaken, fmt.Sprintf("Could not close combined file %#v: %v", targetPath, err))
-		
+
 		return
 	}
-	
+
 	c.writeMessage(StatusFileOK, "COMB succeeded!")
 }
 
 func (c *clientHandler) handleCHMOD(params string) {
 	spl := strings.SplitN(params, " ", 2)
 	modeNb, err := strconv.ParseUint(spl[0], 8, 32)
-	
+
 	mode := os.FileMode(modeNb)
 	path := c.absPath(spl[1])
-	
+
 	if err == nil {
 		err = c.driver.Chmod(path, mode)
 	}
-	
+
 	if err != nil {
 		c.writeMessage(StatusActionNotTaken, err.Error())
-		
+
 		return
 	}
-	
+
 	c.writeMessage(StatusOK, "SITE CHMOD command successful")
 }
 
 // https://www.raidenftpd.com/en/raiden-ftpd-doc/help-sitecmd.html (wildcard isn't supported)
 func (c *clientHandler) handleCHOWN(params string) {
 	spl := strings.SplitN(params, " ", 3)
-	
+
 	if len(spl) != 2 {
 		c.writeMessage(StatusSyntaxErrorParameters, "bad command")
-		
+
 		return
 	}
-	
+
 	var userID, groupID int
 	{
 		usergroup := strings.Split(spl[0], ":")
 		userName := usergroup[0]
-		
+
 		if id, err := strconv.ParseInt(userName, 10, 32); err == nil {
 			userID = int(id)
 		} else {
 			userID = 0
 		}
-		
+
 		if len(usergroup) > 1 {
 			groupName := usergroup[1]
 			if id, err := strconv.ParseInt(groupName, 10, 32); err == nil {
@@ -313,9 +313,9 @@ func (c *clientHandler) handleCHOWN(params string) {
 			groupID = 0
 		}
 	}
-	
+
 	path := c.absPath(spl[1])
-	
+
 	if err := c.driver.Chown(path, userID, groupID); err != nil {
 		c.writeMessage(StatusActionNotTaken, fmt.Sprintf("Couldn't chown: %v", err))
 	} else {
@@ -327,16 +327,16 @@ func (c *clientHandler) handleCHOWN(params string) {
 // GUID-AB301948-C6FF-4957-9291-FE3F02457FD0.html
 func (c *clientHandler) handleSYMLINK(params string) {
 	spl := strings.SplitN(params, " ", 3)
-	
+
 	if len(spl) != 2 {
 		c.writeMessage(StatusSyntaxErrorParameters, "bad command")
-		
+
 		return
 	}
-	
+
 	oldname := c.absPath(spl[0])
 	newname := c.absPath(spl[1])
-	
+
 	if symlinkInt, ok := c.driver.(ClientDriverExtensionSymlink); !ok {
 		// It's not implemented and that's not OK, it must be explicitly refused
 		c.writeMessage(StatusCommandNotImplemented, "This extension hasn't been implemented !")
@@ -356,7 +356,7 @@ func (c *clientHandler) handleDELE(param string) error {
 	} else {
 		c.writeMessage(StatusActionNotTaken, fmt.Sprintf("Couldn't delete %s: %v", path, err))
 	}
-	
+
 	return nil
 }
 
@@ -368,13 +368,13 @@ func (c *clientHandler) handleRNFR(param string) error {
 	} else {
 		c.writeMessage(StatusActionNotTaken, fmt.Sprintf("Couldn't access %s: %v", path, err))
 	}
-	
+
 	return nil
 }
 
 func (c *clientHandler) handleRNTO(param string) error {
 	dst := c.absPath(param)
-	
+
 	if c.ctxRnfr != "" {
 		if err := c.driver.Rename(c.ctxRnfr, dst); err == nil {
 			c.writeMessage(StatusFileOK, "Done !")
@@ -386,7 +386,7 @@ func (c *clientHandler) handleRNTO(param string) error {
 	} else {
 		c.writeMessage(StatusBadCommandSequence, "RNFR is expected before RNTO")
 	}
-	
+
 	return nil
 }
 
@@ -401,53 +401,53 @@ func (c *clientHandler) handleRNTO(param string) error {
 func (c *clientHandler) handleSIZE(param string) error {
 	if c.currentTransferType == TransferTypeASCII {
 		c.writeMessage(StatusActionNotTaken, "SIZE not allowed in ASCII mode")
-		
+
 		return nil
 	}
-	
+
 	path := c.absPath(param)
 	if info, err := c.driver.Stat(path); err == nil {
 		c.writeMessage(StatusFileStatus, strconv.FormatInt(info.Size(), 10))
 	} else {
 		c.writeMessage(StatusActionNotTaken, fmt.Sprintf("Couldn't access %s: %v", path, err))
 	}
-	
+
 	return nil
 }
 
 func (c *clientHandler) handleSTATFile(param string) error {
 	path := c.absPath(param)
-	
+
 	info, err := c.driver.Stat(path)
 	if err != nil {
 		c.writeMessage(StatusFileActionNotTaken, fmt.Sprintf("Could not STAT: %v", err))
-		
+
 		return nil
 	}
-	
+
 	if !info.IsDir() {
 		defer c.multilineAnswer(StatusFileStatus, fmt.Sprintf("STAT %v", param))()
-		
+
 		c.writeLine(" " + c.fileStat(info))
-		
+
 		return nil
 	}
-	
+
 	var files []os.FileInfo
-	
+
 	directoryPath := c.absPath(param)
-	
+
 	if fileList, ok := c.driver.(ClientDriverExtensionFileList); ok {
 		lister, err := fileList.ReadDir(directoryPath)
 		if err != nil {
 			c.writeMessage(StatusFileActionNotTaken, fmt.Sprintf("Could not list: %v", err))
-			
+
 			return nil
 		}
 		defer lister.Close()
-		
+
 		replySent := false
-		
+
 		for {
 			files, err := lister.Next(1000)
 			if err != nil && !errors.Is(err, io.EOF) {
@@ -462,55 +462,55 @@ func (c *clientHandler) handleSTATFile(param string) error {
 				defer c.multilineAnswer(StatusDirectoryStatus, fmt.Sprintf("STAT %v", param))()
 				replySent = true
 			}
-			
+
 			for _, f := range files {
 				c.writeLine(fmt.Sprintf(" %s", c.fileStat(f)))
 			}
-			
+
 			if errors.Is(err, io.EOF) {
 				break
 			}
 		}
 		return nil
 	}
-	
+
 	directory, err := c.driver.Open(c.absPath(param))
-	
+
 	if err != nil {
 		c.writeMessage(StatusFileActionNotTaken, fmt.Sprintf("Could not list: %v", err))
-		
+
 		return nil
 	}
-	
+
 	files, err = directory.Readdir(-1)
 	c.closeDirectory(directoryPath, directory)
-	
+
 	if err == nil {
 		defer c.multilineAnswer(StatusDirectoryStatus, fmt.Sprintf("STAT %v", param))()
-		
+
 		for _, f := range files {
 			c.writeLine(fmt.Sprintf(" %s", c.fileStat(f)))
 		}
 	} else {
 		c.writeMessage(StatusFileActionNotTaken, fmt.Sprintf("Could not list: %v", err))
 	}
-	
+
 	return nil
 }
 
 func (c *clientHandler) handleMLST(param string) error {
 	if c.server.settings.DisableMLST {
 		c.writeMessage(StatusSyntaxErrorNotRecognised, "MLST has been disabled")
-		
+
 		return nil
 	}
-	
+
 	path := c.absPath(param)
-	
+
 	info, err := c.driver.Stat(path)
 	if err == nil {
 		defer c.multilineAnswer(StatusFileOK, "File details")()
-		
+
 		// Each MLSx entry must start with a space when returned in a multiline answer
 		if err = c.writer.WriteByte(' '); err == nil {
 			err = c.writeMLSxEntry(c.writer, info)
@@ -519,7 +519,7 @@ func (c *clientHandler) handleMLST(param string) error {
 		c.writeMessage(StatusActionNotTaken, fmt.Sprintf("Could not list: %v", err))
 		err = nil
 	}
-	
+
 	return err
 }
 
@@ -528,10 +528,10 @@ func (c *clientHandler) handleALLO(param string) error {
 	size, err := strconv.Atoi(param)
 	if err != nil {
 		c.writeMessage(StatusSyntaxErrorParameters, fmt.Sprintf("Couldn't parse size: %v", err))
-		
+
 		return nil
 	}
-	
+
 	if alloInt, ok := c.driver.(ClientDriverExtensionAllocate); !ok {
 		c.writeMessage(StatusNotImplemented, "This extension hasn't been implemented !")
 	} else {
@@ -541,7 +541,7 @@ func (c *clientHandler) handleALLO(param string) error {
 			c.writeMessage(StatusOK, "Done !")
 		}
 	}
-	
+
 	return nil
 }
 
@@ -549,16 +549,16 @@ func (c *clientHandler) handleREST(param string) error {
 	if size, err := strconv.ParseInt(param, 10, 0); err == nil {
 		if c.currentTransferType == TransferTypeASCII {
 			c.writeMessage(StatusSyntaxErrorParameters, "Resuming transfers not allowed in ASCII mode")
-			
+
 			return nil
 		}
-		
+
 		c.ctxRest = size
 		c.writeMessage(StatusFileActionPending, "OK")
 	} else {
 		c.writeMessage(StatusActionNotTaken, fmt.Sprintf("Couldn't parse size: %v", err))
 	}
-	
+
 	return nil
 }
 
@@ -569,7 +569,7 @@ func (c *clientHandler) handleMDTM(param string) error {
 	} else {
 		c.writeMessage(StatusActionNotTaken, fmt.Sprintf("Couldn't access %s: %s", path, err.Error()))
 	}
-	
+
 	return nil
 }
 
@@ -580,29 +580,29 @@ func (c *clientHandler) handleMFMT(param string) error {
 		c.writeMessage(StatusSyntaxErrorNotRecognised,
 			"Couldn't set mtime, not enough params, given: "+param,
 		)
-		
+
 		return nil
 	}
-	
+
 	mtime, err := time.Parse("20060102150405", params[0])
 	if err != nil {
 		c.writeMessage(StatusSyntaxErrorParameters, fmt.Sprintf(
 			"Couldn't parse mtime, given: %s, err: %v", params[0], err))
-		
+
 		return nil
 	}
-	
+
 	path := c.absPath(params[1])
-	
+
 	if err := c.driver.Chtimes(path, mtime, mtime); err != nil {
 		c.writeMessage(StatusActionNotTaken, fmt.Sprintf(
 			"Couldn't set mtime %q for %q, err: %v", mtime.Format(time.RFC3339), path, err))
-		
+
 		return nil
 	}
-	
+
 	c.writeMessage(StatusFileStatus, fmt.Sprintf("Modify=%s; %s", params[0], params[1]))
-	
+
 	return nil
 }
 
@@ -634,34 +634,34 @@ func (c *clientHandler) handleGenericHash(param string, algo HASHAlgo, isCustomM
 	if !c.server.settings.EnableHASH {
 		// if disabled the client should not arrive here as HASH support is not declared in the FEAT response
 		c.writeMessage(StatusCommandNotImplemented, "File hash support is disabled")
-		
+
 		return nil
 	}
-	
+
 	args, err := unquoteSpaceSeparatedParams(param)
 	if err != nil || len(args) == 0 {
 		c.writeMessage(StatusSyntaxErrorParameters, fmt.Sprintf("invalid HASH parameters: %v", param))
-		
+
 		return nil
 	}
-	
+
 	info, err := c.driver.Stat(args[0])
-	
+
 	if err != nil {
 		c.writeMessage(StatusActionNotTaken, fmt.Sprintf("%v: %v", param, err))
-		
+
 		return nil
 	}
-	
+
 	if !info.Mode().IsRegular() {
 		c.writeMessage(StatusActionNotTakenNoFile, fmt.Sprintf("%v is not a regular file", param))
-		
+
 		return nil
 	}
-	
+
 	start := int64(0)
 	end := info.Size()
-	
+
 	// to support partial hash also for the HASH command, we should implement RANG,
 	// but it applies also to uploads/downloads and so it complicates their handling,
 	// we'll add this support in future improvements
@@ -672,46 +672,46 @@ func (c *clientHandler) handleGenericHash(param string, algo HASHAlgo, isCustomM
 			start, err = strconv.ParseInt(args[1], 10, 64)
 			if err != nil {
 				c.writeMessage(StatusSyntaxErrorParameters, fmt.Sprintf("invalid start offset %v: %v", args[1], err))
-				
+
 				return nil
 			}
 		}
-		
+
 		if len(args) > 2 {
 			end, err = strconv.ParseInt(args[2], 10, 64)
 			if err != nil {
 				c.writeMessage(StatusSyntaxErrorParameters, fmt.Sprintf("invalid end offset %v: %v", args[2], err))
-				
+
 				return nil
 			}
 		}
 	}
-	
+
 	var result string
 	if hasher, ok := c.driver.(ClientDriverExtensionHasher); ok {
 		result, err = hasher.ComputeHash(c.absPath(args[0]), algo, start, end)
 	} else {
 		result, err = c.computeHashForFile(c.absPath(args[0]), algo, start, end)
 	}
-	
+
 	if err != nil {
 		c.writeMessage(StatusActionNotTaken, fmt.Sprintf("%v: %v", args[0], err))
-		
+
 		return nil
 	}
-	
+
 	hashName := getHashName(algo)
 	firstLine := fmt.Sprintf("Computing %v digest", hashName)
-	
+
 	if isCustomMode {
 		c.writeMessage(StatusFileOK, fmt.Sprintf("%v\r\n%v", firstLine, result))
-		
+
 		return nil
 	}
-	
+
 	response := fmt.Sprintf("%v\r\n%v %v-%v %v %v", firstLine, hashName, start, end, result, args[0])
 	c.writeMessage(StatusFileStatus, response)
-	
+
 	return nil
 }
 
@@ -719,7 +719,7 @@ func (c *clientHandler) computeHashForFile(filePath string, algo HASHAlgo, start
 	var chosenHashAlgo hash.Hash
 	var file FileTransfer
 	var err error
-	
+
 	switch algo {
 	case HASHAlgoCRC32:
 		chosenHashAlgo = crc32.NewIEEE()
@@ -734,27 +734,27 @@ func (c *clientHandler) computeHashForFile(filePath string, algo HASHAlgo, start
 	default:
 		return "", errUnknowHash
 	}
-	
+
 	file, err = c.getFileHandle(filePath, os.O_RDONLY, start)
 	if err != nil {
 		return "", err
 	}
-	
+
 	defer c.closeUnchecked(file) // we ignore close error here
-	
+
 	if start > 0 {
 		_, err = file.Seek(start, io.SeekStart)
 		if err != nil {
 			return "", newFileAccessError("couldn't seek file", err)
 		}
 	}
-	
+
 	_, err = io.CopyN(chosenHashAlgo, file, end-start)
-	
+
 	if err != nil && !errors.Is(err, io.EOF) {
 		return "", newFileAccessError("couldn't read file", err)
 	}
-	
+
 	return hex.EncodeToString(chosenHashAlgo.Sum(nil)), nil
 }
 
@@ -764,15 +764,15 @@ func (c *clientHandler) getFileHandle(name string, flags int, offset int64) (Fil
 		if err != nil {
 			err = newDriverError("calling GetHandle", err)
 		}
-		
+
 		return ft, err
 	}
-	
+
 	file, err := c.driver.OpenFile(name, flags, os.ModePerm)
 	if err != nil {
 		err = newDriverError("calling OpenFile", err)
 	}
-	
+
 	return file, err
 }
 
@@ -796,11 +796,11 @@ func (c *clientHandler) closeUnchecked(file io.Closer) {
 func unquoteSpaceSeparatedParams(params string) ([]string, error) {
 	reader := csv.NewReader(strings.NewReader(params))
 	reader.Comma = ' ' // space
-	
+
 	spl, err := reader.Read()
 	if err != nil {
 		return nil, fmt.Errorf("error parsing params: %w", err)
 	}
-	
+
 	return spl, nil
 }

@@ -1,7 +1,7 @@
 //go:build !linux && !freebsd && !darwin && !aix && !dragonfly && !netbsd && !openbsd && !windows
 // +build !linux,!freebsd,!darwin,!aix,!dragonfly,!netbsd,!openbsd,!windows
 
-package server
+package ftp
 
 import (
 	"syscall"

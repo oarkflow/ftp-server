@@ -9,8 +9,8 @@ import (
 
 	ftpserver "github.com/oarkflow/ftp-server"
 	"github.com/oarkflow/ftp-server/config"
+	"github.com/oarkflow/ftp-server/ftp"
 	"github.com/oarkflow/ftp-server/log/oarklog"
-	"github.com/oarkflow/ftp-server/server"
 )
 
 var (
@@ -25,7 +25,7 @@ var (
 )
 
 var (
-	ftpServer *server.Server
+	ftpServer *ftp.Server
 	driver    *ftpserver.Server
 )
 
@@ -81,7 +81,7 @@ func main() {
 	}
 
 	// Instantiating the server by passing our driver implementation
-	ftpServer = server.New(driver)
+	ftpServer = ftp.New(driver)
 
 	// Overriding the server default silent logger by a sub-logger (component: server)
 	ftpServer.Logger = logger.With("component", "server")

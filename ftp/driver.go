@@ -1,11 +1,11 @@
-package server
+package ftp
 
 import (
 	"crypto/tls"
 	"io"
 	"net"
 	"os"
-	
+
 	"github.com/spf13/afero"
 )
 
@@ -15,16 +15,16 @@ import (
 type MainDriver interface {
 	// GetSettings returns some general settings around the server setup
 	GetSettings() (*Settings, error)
-	
+
 	// ClientConnected is called to send the very first welcome message
 	ClientConnected(cc ClientContext) (string, error)
-	
+
 	// ClientDisconnected is called when the user disconnects, even if he never authenticated
 	ClientDisconnected(cc ClientContext)
-	
+
 	// AuthUser authenticates the user and selects an handling driver
 	AuthUser(cc ClientContext, user, pass string) (ClientDriver, error)
-	
+
 	// GetTLSConfig returns a TLS Certificate to use
 	// The certificate could frequently change if we use something like "let's encrypt"
 	GetTLSConfig() (*tls.Config, error)
@@ -95,7 +95,7 @@ type ClientDriverExtensionAllocate interface {
 type ClientDriverExtensionSymlink interface {
 	// Symlink creates a symlink
 	Symlink(oldname, newname string) error
-	
+
 	// SymlinkIfPossible allows to get the source of a symlink (but we don't need for now)
 	// ReadlinkIfPossible(name string) (string, error)
 }
@@ -149,52 +149,52 @@ type ClientDriverExtensionAvailableSpace interface {
 type ClientContext interface {
 	// Path provides the path of the current connection
 	Path() string
-	
+
 	// SetPath sets the path of the current connection.
 	// This method is useful to set a start directory, you should use it before returning a successful
 	// authentication response from your driver implementation.
 	// Calling this method after the authentication step could lead to undefined behavior
 	SetPath(value string)
-	
+
 	// SetListPath allows to change the path for the last LIST/NLST request.
 	// This method is useful if the driver expands wildcards and so the returned results
 	// refer to a path different from the requested one.
 	// The value must be cleaned using path.Clean
 	SetListPath(value string)
-	
+
 	// SetDebug activates the debugging of this connection commands
 	SetDebug(debug bool)
-	
+
 	// Debug returns the current debugging status of this connection commands
 	Debug() bool
-	
+
 	// Client's ID on the server
 	ID() uint32
-	
+
 	// Client's address
 	RemoteAddr() net.Addr
-	
+
 	// Servers's address
 	LocalAddr() net.Addr
-	
+
 	// Client's version can be empty
 	GetClientVersion() string
-	
+
 	// Close closes the connection and disconnects the client.
 	Close() error
-	
+
 	// HasTLSForControl returns true if the control connection is over TLS
 	HasTLSForControl() bool
-	
+
 	// HasTLSForTransfers returns true if the transfer connection is over TLS
 	HasTLSForTransfers() bool
-	
+
 	// GetLastCommand returns the last received command
 	GetLastCommand() string
-	
+
 	// GetLastDataChannel returns the last data channel mode
 	GetLastDataChannel() DataChannel
-	
+
 	// SetTLSRequirement sets the TLS requirement to respect on a per-client basis.
 	// The requirement is checked when the client issues the "USER" command,
 	// after executing the MainDriverExtensionUserVerifier extension, and
@@ -203,10 +203,10 @@ type ClientContext interface {
 	// If you want to enforce the same requirement for all
 	// clients, use the TLSRequired parameter defined in server settings instead
 	SetTLSRequirement(requirement TLSRequirement) error
-	
+
 	// SetExtra allows to set application specific data
 	SetExtra(extra any)
-	
+
 	// Extra returns application specific data set using SetExtra
 	Extra() any
 }

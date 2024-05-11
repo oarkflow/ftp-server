@@ -1,4 +1,4 @@
-package server
+package ftp
 
 // from @stevenh's PR proposal
 // https://github.com/oarkflow/ftp-server/blob/becc125a0770e3b670c4ced7e7bd12594fb024ff/server/consts.go
@@ -11,7 +11,7 @@ const (
 	// 100 Series - The requested action is being initiated, expect another reply before
 	// proceeding with a new command.
 	StatusFileStatusOK = 150 // RFC 959, 4.2.1
-	
+
 	// 200 Series - The requested action has been successfully completed.
 	StatusOK                 = 200 // RFC 959, 4.2.1
 	StatusNotImplemented     = 202 // RFC 959, 4.2.1
@@ -29,19 +29,19 @@ const (
 	StatusAuthAccepted       = 234 // RFC 2228, 3
 	StatusFileOK             = 250 // RFC 959, 4.2.1
 	StatusPathCreated        = 257 // RFC 959, 4.2.1
-	
+
 	// 300 Series - The command has been accepted, but the requested action is on hold,
 	// pending receipt of further information.
 	StatusUserOK            = 331 // RFC 959, 4.2.1
 	StatusFileActionPending = 350 // RFC 959, 4.2.1
-	
+
 	// 400 Series - The command was not accepted and the requested action did not take place,
 	// but the error condition is temporary and the action may be requested again.
 	StatusServiceNotAvailable      = 421 // RFC 959, 4.2.1
 	StatusCannotOpenDataConnection = 425 // RFC 959, 4.2.1
 	StatusTransferAborted          = 426 // RFC 959, 4.2.1
 	StatusFileActionNotTaken       = 450 // RFC 959, 4.2.1
-	
+
 	// 500 Series - Syntax error, command unrecognized and the requested action did not take
 	// place. This may include errors such as command line too long.
 	StatusSyntaxErrorNotRecognised = 500 // RFC 959, 4.2.1

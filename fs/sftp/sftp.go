@@ -35,7 +35,7 @@ func LoadFs(access *models.Access) (afero.Fs, error) {
 			return nil
 		},
 	}
-	fmt.Println("Host", par)
+
 	// Dial your ssh server.
 	conn, errSSH := ssh.Dial("tcp", par["hostname"], config)
 	if errSSH != nil {

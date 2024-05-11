@@ -11,6 +11,7 @@ require (
 	github.com/go-mail/mail v2.3.1+incompatible
 	github.com/oarkflow/log v1.0.77
 	github.com/pkg/sftp v1.13.6
+	github.com/sirupsen/logrus v1.9.3
 	github.com/spf13/afero v1.11.0
 	github.com/tidwall/sjson v1.2.5
 	golang.org/x/crypto v0.16.0

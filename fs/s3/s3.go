@@ -9,7 +9,6 @@ import (
 	awshttp "github.com/aws/aws-sdk-go-v2/aws/transport/http"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/pkg/sftp"
-	"go.uber.org/zap"
 
 	"github.com/oarkflow/ftp-server/log"
 
@@ -76,9 +75,9 @@ func (f *Fs) Filewrite(request *sftp.Request) (io.WriterAt, error) {
 	file, err := f.Create(p)
 	if err != nil {
 		f.logger.Error("error opening existing file",
-			zap.Uint32("flags", request.Flags),
-			zap.String("source", p),
-			zap.Error(err),
+			"flags", request.Flags,
+			"source", p,
+			"err", err,
 		)
 		return nil, sftp.ErrSshFxFailure
 	}
@@ -180,7 +179,7 @@ func (f *Fs) Filelist(request *sftp.Request) (sftp.ListerAt, error) {
 		file := NewFile(f, p)
 		files, err := file.ReaddirAll()
 		if err != nil {
-			f.logger.Error("error listing directory", zap.Error(err))
+			f.logger.Error("error listing directory", "err", err)
 			return nil, sftp.ErrSshFxFailure
 		}
 
@@ -194,7 +193,7 @@ func (f *Fs) Filelist(request *sftp.Request) (sftp.ListerAt, error) {
 		if os.IsNotExist(err) {
 			return nil, sftp.ErrSshFxNoSuchFile
 		} else if err != nil {
-			f.logger.Error("error running STAT on file", zap.Error(err))
+			f.logger.Error("error running STAT on file", "err", err)
 			return nil, sftp.ErrSshFxFailure
 		}
 
@@ -226,13 +225,11 @@ func (f *Fs) Type() string {
 }
 
 type Option struct {
-	Endpoint   string `json:"endpoint"`
-	Region     string `json:"region"`
-	Bucket     string `json:"bucket"`
-	AccessKey  string `json:"access_key"`
-	Secret     string `json:"secret"`
-	DisableSSL bool   `json:"disable_ssl"`
-	PathStyle  bool   `json:"path_style"`
+	Endpoint  string `json:"endpoint"`
+	Region    string `json:"region"`
+	Bucket    string `json:"bucket"`
+	AccessKey string `json:"access_key"`
+	Secret    string `json:"secret"`
 }
 
 func New(opt Option) (interfaces.Filesystem, error) {

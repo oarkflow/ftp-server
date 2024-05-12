@@ -11,7 +11,6 @@ import (
 	"sync"
 
 	"github.com/pkg/sftp"
-	"go.uber.org/zap"
 
 	"github.com/oarkflow/ftp-server/log"
 
@@ -183,9 +182,9 @@ func (f *Afos) Filewrite(request *sftp.Request) (io.WriterAt, error) {
 	file, err := os.Create(p)
 	if err != nil {
 		f.logger.Error("error opening existing file",
-			zap.Uint32("flags", request.Flags),
-			zap.String("source", p),
-			zap.Error(err),
+			"flags", request.Flags,
+			"source", p,
+			"err", err,
 		)
 		return nil, sftp.ErrSshFxFailure
 	}
@@ -326,7 +325,7 @@ func (f *Afos) Filelist(request *sftp.Request) (sftp.ListerAt, error) {
 
 		files, err := ioutil.ReadDir(p)
 		if err != nil {
-			f.logger.Error("error listing directory", zap.Error(err))
+			f.logger.Error("error listing directory", "err", err)
 			return nil, sftp.ErrSshFxFailure
 		}
 		return fs.ListerAt(files), nil
@@ -339,7 +338,7 @@ func (f *Afos) Filelist(request *sftp.Request) (sftp.ListerAt, error) {
 		if os.IsNotExist(err) {
 			return nil, sftp.ErrSshFxNoSuchFile
 		} else if err != nil {
-			f.logger.Error("error running STAT on file", zap.Error(err))
+			f.logger.Error("error running STAT on file", "err", err)
 			return nil, sftp.ErrSshFxFailure
 		}
 

@@ -5,6 +5,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"slices"
 	"sync"
 
 	"github.com/pkg/sftp"
@@ -13,16 +14,14 @@ import (
 
 // FileSystem ... A file system exposed to a user.
 type FileSystem struct {
-	UUID        string
-	Permissions []string
-	ReadOnly    bool
-	User        User
-
+	UUID          string
+	Permissions   []string
+	ReadOnly      bool
+	User          User
 	PathValidator func(fs *FileSystem, p string) (string, error)
 	HasDiskSpace  func(fs *FileSystem) bool
-
-	logger *zap.SugaredLogger
-	lock   sync.Mutex
+	logger        *zap.SugaredLogger
+	lock          sync.Mutex
 }
 
 func (fs *FileSystem) buildPath(p string) (string, error) {
@@ -352,14 +351,5 @@ func (fs *FileSystem) can(permission string) bool {
 	if len(fs.Permissions) == 1 && fs.Permissions[0] == "*" {
 		return true
 	}
-
-	// Not the owner or an admin, loop over the permissions that were returned to determine
-	// if they have the passed permission.
-	for _, p := range fs.Permissions {
-		if p == permission {
-			return true
-		}
-	}
-
-	return false
+	return slices.Contains(fs.Permissions, permission)
 }

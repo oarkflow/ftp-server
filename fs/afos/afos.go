@@ -28,7 +28,6 @@ type Afos struct {
 	dataPath      string
 	permissions   []string
 	readOnly      bool
-	osUser        fs.OsUser
 	pathValidator func(fs interfaces.Filesystem, p string) (string, error)
 	hasDiskSpace  func(fs interfaces.Filesystem) bool
 	lock          sync.Mutex
@@ -39,10 +38,6 @@ func defaultAfos(basePath string) *Afos {
 	dataPath := "data"
 	return &Afos{
 		dataPath: dataPath,
-		osUser: fs.OsUser{
-			UID: 10,
-			GID: 10,
-		},
 		pathValidator: func(fs interfaces.Filesystem, p string) (string, error) {
 			join := path.Join(basePath, dataPath, p)
 			clean := path.Clean(path.Join(basePath, dataPath))
@@ -160,12 +155,6 @@ func (f *Afos) Filewrite(request *sftp.Request) (io.WriterAt, error) {
 			return nil, sftp.ErrSshFxFailure
 		}
 
-		// Not failing here is intentional. We still made the file, it is just owned incorrectly
-		// and will likely cause some issues.
-		if err := os.Chown(p, f.osUser.UID, f.osUser.GID); err != nil {
-			f.logger.Warn("error chowning file", "file", p, "err", err)
-		}
-
 		return file, nil
 	}
 
@@ -199,12 +188,6 @@ func (f *Afos) Filewrite(request *sftp.Request) (io.WriterAt, error) {
 			zap.Error(err),
 		)
 		return nil, sftp.ErrSshFxFailure
-	}
-
-	// Not failing here is intentional. We still made the file, it is just owned incorrectly
-	// and will likely cause some issues.
-	if err := os.Chown(p, f.osUser.UID, f.osUser.GID); err != nil {
-		f.logger.Warn("error chowning file", "file", p, zap.Error(err))
 	}
 
 	return file, nil
@@ -324,18 +307,6 @@ func (f *Afos) Filecmd(request *sftp.Request) error {
 		return sftp.ErrSshFxOpUnsupported
 	}
 
-	var fileLocation = p
-	if target != "" {
-		fileLocation = target
-	}
-
-	// Not failing here is intentional. We still made the file, it is just owned incorrectly
-	// and will likely cause some issues. There is no logical check for if the file was removed
-	// because both of those cases (Rmdir, Remove) have an explicit return rather than break.
-	if err := os.Chown(fileLocation, f.osUser.UID, f.osUser.GID); err != nil {
-		f.logger.Warn("error chowning file", "file", fileLocation, "err", err)
-	}
-
 	return sftp.ErrSshFxOk
 }
 
@@ -358,7 +329,6 @@ func (f *Afos) Filelist(request *sftp.Request) (sftp.ListerAt, error) {
 			f.logger.Error("error listing directory", zap.Error(err))
 			return nil, sftp.ErrSshFxFailure
 		}
-
 		return fs.ListerAt(files), nil
 	case "Stat":
 		if !fs.Can(f.permissions, utils.PermissionFileRead) {

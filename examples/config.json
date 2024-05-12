@@ -8,7 +8,7 @@
 		"testuser": {
 			"username": "testuser",
 			"password": "f15c16b99f82d8201767d3a841ff40849c8a1b812ffbfd2e393d2b6aa6682a6e",
-			"permissions": ["file.read", "file.read-content", "file.create", "file.update"]
+			"permissions": ["file.read", "file.read-content", "file.create", "file.update", "file.delete"]
 		}
 	}
 }

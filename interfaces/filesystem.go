@@ -3,8 +3,9 @@ package interfaces
 import (
 	"io"
 
-	"github.com/fclairamb/go-log"
 	"github.com/pkg/sftp"
+
+	"github.com/oarkflow/ftp-server/log"
 )
 
 type Filesystem interface {
@@ -15,4 +16,5 @@ type Filesystem interface {
 	SetLogger(logger log.Logger)
 	SetPermissions(p []string)
 	SetID(p string)
+	Type() string
 }

@@ -4,11 +4,10 @@ import (
 	"encoding/json"
 	"os"
 
-	v2 "github.com/oarkflow/ftp-server/v2"
-	"github.com/oarkflow/ftp-server/v2/fs"
-	"github.com/oarkflow/ftp-server/v2/fs/afos"
-	"github.com/oarkflow/ftp-server/v2/models"
-	"github.com/oarkflow/ftp-server/v2/utils"
+	v2 "github.com/oarkflow/ftp-server"
+	"github.com/oarkflow/ftp-server/fs"
+	"github.com/oarkflow/ftp-server/fs/s3"
+	"github.com/oarkflow/ftp-server/models"
 )
 
 type config struct {
@@ -23,13 +22,30 @@ type config struct {
 func main() {
 	// Read the config.json.
 	var conf config
+	var s3Opt s3.Option
 	configFile, err := os.ReadFile("config.json")
 	if err != nil {
 		panic(err)
 	}
-	json.Unmarshal(configFile, &conf)
-	fs := afos.New(utils.AbsPath(""))
-	server := v2.New(fs)
+	err = json.Unmarshal(configFile, &conf)
+	if err != nil {
+		panic(err)
+	}
+	s3Config, err := os.ReadFile("creds.json")
+	if err != nil {
+		panic(err)
+	}
+	err = json.Unmarshal(s3Config, &s3Opt)
+	if err != nil {
+		panic(err)
+	}
+	s3Opt.OSUser = conf.User
+	// filesystem := afos.New(utils.AbsPath(""))
+	filesystem, err := s3.New(s3Opt)
+	if err != nil {
+		panic(err)
+	}
+	server := v2.New(filesystem)
 	for _, user := range conf.Users {
 		server.AddUser(user)
 	}

@@ -1,8 +1,8 @@
 package interfaces
 
 import (
-	"github.com/oarkflow/ftp-server/v2/fs"
-	"github.com/oarkflow/ftp-server/v2/models"
+	"github.com/oarkflow/ftp-server/fs"
+	"github.com/oarkflow/ftp-server/models"
 )
 
 type UserProvider interface {

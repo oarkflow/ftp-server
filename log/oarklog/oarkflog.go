@@ -7,7 +7,7 @@ import (
 
 	oarkLog "github.com/oarkflow/log"
 
-	"github.com/fclairamb/go-log"
+	"github.com/oarkflow/ftp-server/log"
 )
 
 // New creates a no-op logger

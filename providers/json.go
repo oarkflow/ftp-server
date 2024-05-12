@@ -7,9 +7,9 @@ import (
 
 	"github.com/oarkflow/pkg/hash"
 
-	"github.com/oarkflow/ftp-server/v2/errs"
-	"github.com/oarkflow/ftp-server/v2/fs"
-	"github.com/oarkflow/ftp-server/v2/models"
+	"github.com/oarkflow/ftp-server/errs"
+	"github.com/oarkflow/ftp-server/fs"
+	"github.com/oarkflow/ftp-server/models"
 )
 
 type JsonFileProvider struct {

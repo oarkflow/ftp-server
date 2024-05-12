@@ -1,11 +1,11 @@
-package v2
+package ftpserverlib
 
 import (
-	"github.com/oarkflow/ftp-server/v2/fs"
-	"github.com/oarkflow/ftp-server/v2/interfaces"
+	"github.com/oarkflow/ftp-server/fs"
+	interfaces2 "github.com/oarkflow/ftp-server/interfaces"
 )
 
-func WithUserProvider(provider interfaces.UserProvider) func(*Server) {
+func WithUserProvider(provider interfaces2.UserProvider) func(*Server) {
 	return func(o *Server) {
 		o.userProvider = provider
 	}
@@ -53,7 +53,7 @@ func WithCredentialValidator(val func(server *Server, r fs.AuthenticationRequest
 	}
 }
 
-func WithFilesystem(val interfaces.Filesystem) func(server *Server) {
+func WithFilesystem(val interfaces2.Filesystem) func(server *Server) {
 	return func(o *Server) {
 		o.fs = val
 	}

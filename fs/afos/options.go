@@ -1,8 +1,8 @@
 package afos
 
 import (
-	"github.com/oarkflow/ftp-server/v2/fs"
-	"github.com/oarkflow/ftp-server/v2/interfaces"
+	"github.com/oarkflow/ftp-server/fs"
+	"github.com/oarkflow/ftp-server/interfaces"
 )
 
 func WithOsUser(val fs.OsUser) func(server *Afos) {

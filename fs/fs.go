@@ -1,71 +1,58 @@
 package fs
 
 import (
-	"fmt"
-
-	"github.com/spf13/afero"
-
-	"github.com/fclairamb/go-log"
-
-	"github.com/oarkflow/ftp-server/fs/afos"
-	"github.com/oarkflow/ftp-server/fs/dropbox"
-	"github.com/oarkflow/ftp-server/fs/gdrive"
-	"github.com/oarkflow/ftp-server/fs/mail"
-	"github.com/oarkflow/ftp-server/fs/s3"
-	"github.com/oarkflow/ftp-server/fs/sftp"
-	"github.com/oarkflow/ftp-server/fs/snd"
-	"github.com/oarkflow/ftp-server/models"
+	"io"
+	"os"
+	"slices"
 )
 
-// UnsupportedFsError is returned when the described file system is not supported
-type UnsupportedFsError struct {
-	error
-	Type string
+type OsUser struct {
+	UID int
+	GID int
 }
 
-func (err UnsupportedFsError) Error() string {
-	return fmt.Sprintf("Unsupported FS: %s", err.Type)
+// AuthenticationRequest ... An authentication request to the SFTP server.
+type AuthenticationRequest struct {
+	User          string `json:"username"`
+	Pass          string `json:"password"`
+	IP            string `json:"ip"`
+	SessionID     []byte `json:"session_id"`
+	ClientVersion []byte `json:"client_version"`
 }
 
-// LoadFs loads a file system from an access description
-func LoadFs(access *models.Access, logger log.Logger) (afero.Fs, error) {
-	var fs afero.Fs
-	var err error
-	switch access.Fs {
-	case "os":
-		fs, err = afos.LoadFs(access)
-	case "s3":
-		fs, err = s3.LoadFs(access)
-	case "sftp":
-		fs, err = sftp.LoadFs(access)
-	case "mail":
-		fs, err = mail.LoadFs(access)
-	case "gdrive":
-		fs, err = gdrive.LoadFs(access, logger.With("component", "gdrive"))
-	case "dropbox":
-		fs, err = dropbox.LoadFs(access)
-	default:
-		fs, err = nil, &UnsupportedFsError{Type: access.Fs}
+// AuthenticationResponse ... An authentication response from the SFTP server.
+type AuthenticationResponse struct {
+	Server      string   `json:"server"`
+	Token       string   `json:"token"`
+	Permissions []string `json:"permissions"`
+}
+
+// ListerAt ... A list of files.
+type ListerAt []os.FileInfo
+
+// ListAt ...
+// Returns the number of entries copied and an io.EOF error if we made it to the end of the file list.
+// Take a look at the pkg/sftp godoc for more information about how this function should work.
+func (l ListerAt) ListAt(f []os.FileInfo, offset int64) (int, error) {
+	if offset >= int64(len(l)) {
+		return 0, io.EOF
 	}
 
-	if err == nil && access.ReadOnly {
-		fs = afero.NewReadOnlyFs(fs)
+	n := copy(f, l[offset:])
+	if n < len(f) {
+		return n, io.EOF
 	}
+	return n, nil
+}
 
-	// If we're defining a dubious behavior, we can use it
-	if err == nil && access != nil && access.SyncAndDelete != nil && access.SyncAndDelete.Enable {
-		var temp afero.Fs
-
-		if access.SyncAndDelete.Directory != "" {
-			temp = afero.NewBasePathFs(afero.NewOsFs(), access.SyncAndDelete.Directory)
-		}
-
-		fs, err = snd.NewFs(&snd.Config{
-			Destination: fs,
-			Temporary:   temp,
-			Logger:      logger.With("component", "snd"),
-		})
+// Can - Determines if a user has permission to perform a specific action on the SFTP server. These
+// permissions are defined and returned by the Panel API.
+func Can(permissions []string, permission string) bool {
+	// Server owners and super admins have their permissions returned as '[*]' via the Panel
+	// API, so for the sake of speed do an initial check for that before iterating over the
+	// entire array of permissions.
+	if len(permissions) == 1 && permissions[0] == "*" {
+		return true
 	}
-
-	return fs, err
+	return slices.Contains(permissions, permission)
 }

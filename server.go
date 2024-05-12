@@ -1,4 +1,4 @@
-package v2
+package ftpserverlib
 
 import (
 	"crypto/rand"
@@ -12,17 +12,18 @@ import (
 	"path"
 	"strings"
 
-	"github.com/fclairamb/go-log"
 	"github.com/pkg/sftp"
 	"golang.org/x/crypto/ssh"
 
+	"github.com/oarkflow/ftp-server/log"
+
+	"github.com/oarkflow/ftp-server/fs"
+	"github.com/oarkflow/ftp-server/fs/afos"
+	interfaces2 "github.com/oarkflow/ftp-server/interfaces"
 	"github.com/oarkflow/ftp-server/log/oarklog"
-	"github.com/oarkflow/ftp-server/v2/fs"
-	"github.com/oarkflow/ftp-server/v2/fs/afos"
-	"github.com/oarkflow/ftp-server/v2/interfaces"
-	"github.com/oarkflow/ftp-server/v2/models"
-	"github.com/oarkflow/ftp-server/v2/providers"
-	"github.com/oarkflow/ftp-server/v2/utils"
+	"github.com/oarkflow/ftp-server/models"
+	"github.com/oarkflow/ftp-server/providers"
+	"github.com/oarkflow/ftp-server/utils"
 )
 
 type Server struct {
@@ -30,15 +31,15 @@ type Server struct {
 	sshPath             string
 	privateKey          string
 	publicKey           string
-	port                int
 	address             string
-	userProvider        interfaces.UserProvider
-	fs                  interfaces.Filesystem
+	port                int
+	userProvider        interfaces2.UserProvider
+	fs                  interfaces2.Filesystem
 	logger              log.Logger
 	credentialValidator func(server *Server, r fs.AuthenticationRequest) (*fs.AuthenticationResponse, error)
 }
 
-func defaultServer(filesystem interfaces.Filesystem) *Server {
+func defaultServer(filesystem interfaces2.Filesystem) *Server {
 	basePath := utils.AbsPath("")
 	userProvider := providers.NewJsonFileProvider("sha256", "")
 	return &Server{
@@ -56,7 +57,7 @@ func defaultServer(filesystem interfaces.Filesystem) *Server {
 	}
 }
 
-func New(filesystem interfaces.Filesystem, opts ...func(*Server)) *Server {
+func New(filesystem interfaces2.Filesystem, opts ...func(*Server)) *Server {
 	svr := defaultServer(filesystem)
 	for _, o := range opts {
 		o(svr)
@@ -94,50 +95,27 @@ func (c *Server) Validate(conn ssh.ConnMetadata, pass []byte) (*ssh.Permissions,
 
 // Initialize the SFTP server and add a persistent listener to handle inbound SFTP connections.
 func (c *Server) Initialize() error {
-	serverConfig := &ssh.ServerConfig{
-		NoClientAuth:     false,
-		MaxAuthTries:     6,
-		PasswordCallback: c.Validate,
-	}
-
-	if _, err := os.Stat(path.Join(c.basePath, c.sshPath, c.privateKey)); os.IsNotExist(err) {
-		if err := c.generatePrivateKey(); err != nil {
-			return err
-		}
-	} else if err != nil {
-		return err
-	}
-
-	privateBytes, err := os.ReadFile(path.Join(c.basePath, c.sshPath, c.privateKey))
+	config, err := c.setupSSH()
 	if err != nil {
 		return err
 	}
-
-	private, err := ssh.ParsePrivateKey(privateBytes)
-	if err != nil {
-		return err
-	}
-
-	// Add our private key to the server configuration.
-	serverConfig.AddHostKey(private)
-
 	listener, err := net.Listen("tcp", fmt.Sprintf("%s:%d", c.address, c.port))
 	if err != nil {
 		return err
 	}
 
-	c.logger.Info("sftp subsystem listening for connections", "host", c.address, "port", c.port)
+	c.logger.Info("sftp subsystem listening for connections", "host", c.address, "port", c.port, "fs_type", c.fs.Type())
 
 	for {
 		conn, _ := listener.Accept()
 		if conn != nil {
-			go c.AcceptInboundConnection(conn, serverConfig)
+			go c.AcceptInboundConnection(conn, config)
 		}
 	}
 }
 
 // AcceptInboundConnection ... Handles an inbound connection to the instance and determines if
-// we should serve the request  or not.
+// we should serve the request or not.
 func (c *Server) AcceptInboundConnection(conn net.Conn, config *ssh.ServerConfig) {
 	defer conn.Close()
 
@@ -215,6 +193,39 @@ func (c *Server) createHandler(perm *ssh.Permissions) sftp.Handlers {
 	}
 }
 
+func (c *Server) getSSHPath() string {
+	return path.Join(c.basePath, c.sshPath, c.privateKey)
+}
+
+func (c *Server) setupSSH() (*ssh.ServerConfig, error) {
+	config := &ssh.ServerConfig{
+		NoClientAuth:     false,
+		MaxAuthTries:     6,
+		PasswordCallback: c.Validate,
+	}
+	if _, err := os.Stat(c.getSSHPath()); os.IsNotExist(err) {
+		if err := c.generatePrivateKey(); err != nil {
+			return nil, err
+		}
+	} else if err != nil {
+		return nil, err
+	}
+
+	privateBytes, err := os.ReadFile(c.getSSHPath())
+	if err != nil {
+		return nil, err
+	}
+
+	private, err := ssh.ParsePrivateKey(privateBytes)
+	if err != nil {
+		return nil, err
+	}
+
+	// Add our private key to the server configuration.
+	config.AddHostKey(private)
+	return config, nil
+}
+
 // Generates a private key that will be used by the SFTP server.
 func (c *Server) generatePrivateKey() error {
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
@@ -226,7 +237,7 @@ func (c *Server) generatePrivateKey() error {
 		return err
 	}
 
-	o, err := os.OpenFile(path.Join(c.basePath, c.sshPath, c.privateKey), os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0600)
+	o, err := os.OpenFile(c.getSSHPath(), os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0600)
 	if err != nil {
 		return err
 	}

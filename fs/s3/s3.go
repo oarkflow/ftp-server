@@ -18,7 +18,10 @@ import (
 	"github.com/oarkflow/ftp-server/utils"
 )
 
-func (f *Fs) fileread(request *sftp.Request) (io.ReaderAt, error) {
+func (f *Fs) Fileread(request *sftp.Request) (io.ReaderAt, error) {
+	if !fs.Can(f.permissions, utils.PermissionFileReadContent) {
+		return nil, sftp.ErrSshFxPermissionDenied
+	}
 	switch request.Method {
 	case "Get":
 		key := strings.TrimPrefix(request.Filepath, "/")
@@ -35,14 +38,10 @@ func (f *Fs) fileread(request *sftp.Request) (io.ReaderAt, error) {
 	}
 }
 
-func (f *Fs) Fileread(request *sftp.Request) (io.ReaderAt, error) {
-	if !fs.Can(f.permissions, utils.PermissionFileReadContent) {
-		return nil, sftp.ErrSshFxPermissionDenied
+func (f *Fs) Filewrite(request *sftp.Request) (io.WriterAt, error) {
+	if f.readOnly {
+		return nil, sftp.ErrSshFxOpUnsupported
 	}
-	return f.fileread(request)
-}
-
-func (f *Fs) filewrite(request *sftp.Request) (io.WriterAt, error) {
 	switch request.Method {
 	case "Put":
 		return newWriter(context.Background(), f.client, f.bucket, strings.TrimPrefix(request.Filepath, "/"))
@@ -51,13 +50,6 @@ func (f *Fs) filewrite(request *sftp.Request) (io.WriterAt, error) {
 	default:
 		return nil, sftp.ErrSSHFxOpUnsupported
 	}
-}
-
-func (f *Fs) Filewrite(request *sftp.Request) (io.WriterAt, error) {
-	if f.readOnly {
-		return nil, sftp.ErrSshFxOpUnsupported
-	}
-	return f.filewrite(request)
 }
 
 func (f *Fs) Filecmd(request *sftp.Request) error {

@@ -22,15 +22,15 @@ import (
 
 // File represents a file in S3.
 type File struct {
-	fs                       *Fs            // Parent file system
-	name                     string         // Name of the file
 	cachedInfo               os.FileInfo    // File info cached for later used
 	streamRead               io.ReadCloser  // streamRead is the underlying stream we are reading from
-	streamReadOffset         int64          // streamReadOffset is the offset of the read-only stream
 	streamWrite              io.WriteCloser // streamWrite is the underlying stream we are reading to
 	streamWriteErr           error          // streamWriteErr is the error that should be returned in case of a write
+	fs                       *Fs            // Parent file system
 	streamWriteCloseErr      chan error     // streamWriteCloseErr is the channel containing the underlying write error
 	readdirContinuationToken *string        // readdirContinuationToken is used to perform files listing across calls
+	name                     string         // Name of the file
+	streamReadOffset         int64          // streamReadOffset is the offset of the read-only stream
 	readdirNotTruncated      bool           // readdirNotTruncated is set when we shall continue reading
 	// I think readdirNotTruncated can be dropped. The continuation token is probably enough.
 }

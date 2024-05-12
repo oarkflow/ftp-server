@@ -11,12 +11,12 @@ import (
 )
 
 type config struct {
-	ReadOnly    bool                   `json:"readOnly"`
-	Port        int                    `json:"port"`
+	Users       map[string]models.User `json:"users"`
 	BindAddress string                 `json:"bind"`
 	Filepath    string                 `json:"files"`
 	User        fs.OsUser              `json:"osUser"`
-	Users       map[string]models.User `json:"users"`
+	Port        int                    `json:"port"`
+	ReadOnly    bool                   `json:"readOnly"`
 }
 
 func main() {

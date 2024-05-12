@@ -25,14 +25,14 @@ import (
 
 // Fs is an FS object backed by S3.
 type Fs struct {
-	id          string
-	permissions []string
-	logger      log.Logger
-	readOnly    bool
-	FileProps   *UploadedFileProperties // FileProps define the file properties we want to set for all new files
+	logger    log.Logger
+	FileProps *UploadedFileProperties // FileProps define the file properties we want to set for all new files
 	// config    aws.Config              // Session config
-	client *s3.Client
-	bucket string // Bucket name
+	client      *s3.Client
+	id          string
+	bucket      string // Bucket name
+	permissions []string
+	readOnly    bool
 }
 
 // UploadedFileProperties defines all the set properties applied to future files

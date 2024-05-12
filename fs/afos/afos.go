@@ -22,15 +22,15 @@ import (
 
 // Afos ... A file system exposed to a user.
 type Afos struct {
+	logger        log.Logger
+	pathValidator func(fs interfaces.Filesystem, p string) (string, error)
+	hasDiskSpace  func(fs interfaces.Filesystem) bool
 	id            string
 	basePath      string
 	dataPath      string
 	permissions   []string
-	readOnly      bool
-	pathValidator func(fs interfaces.Filesystem, p string) (string, error)
-	hasDiskSpace  func(fs interfaces.Filesystem) bool
 	lock          sync.Mutex
-	logger        log.Logger
+	readOnly      bool
 }
 
 func defaultAfos(basePath string) *Afos {

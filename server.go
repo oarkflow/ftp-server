@@ -27,16 +27,16 @@ import (
 )
 
 type Server struct {
+	userProvider        interfaces2.UserProvider
+	fs                  interfaces2.Filesystem
+	logger              log.Logger
+	credentialValidator func(server *Server, r fs.AuthenticationRequest) (*fs.AuthenticationResponse, error)
 	basePath            string
 	sshPath             string
 	privateKey          string
 	publicKey           string
 	address             string
 	port                int
-	userProvider        interfaces2.UserProvider
-	fs                  interfaces2.Filesystem
-	logger              log.Logger
-	credentialValidator func(server *Server, r fs.AuthenticationRequest) (*fs.AuthenticationResponse, error)
 }
 
 func defaultServer(filesystem interfaces2.Filesystem) *Server {

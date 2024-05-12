@@ -21,15 +21,15 @@ import (
 func (f *Fs) fileread(request *sftp.Request) (io.ReaderAt, error) {
 	switch request.Method {
 	case "Get":
+		key := strings.TrimPrefix(request.Filepath, "/")
 		object, err := f.client.GetObject(context.Background(), &s3.GetObjectInput{
 			Bucket: aws.String(f.bucket),
-			Key:    aws.String(strings.TrimPrefix(request.Filepath, "/")),
+			Key:    aws.String(key),
 		})
 		if err != nil {
 			return nil, err
-		} else {
-			return reader{object}, nil
 		}
+		return reader{object: object, client: f.client, key: key, bucket: f.bucket}, nil
 	default:
 		return nil, sftp.ErrSSHFxOpUnsupported
 	}

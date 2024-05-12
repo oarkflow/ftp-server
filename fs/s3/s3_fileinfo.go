@@ -10,18 +10,23 @@ import (
 type FileInfo struct {
 	modTime     time.Time
 	name        string
+	mode        os.FileMode
 	directory   bool
 	sizeInBytes int64
 }
 
 // NewFileInfo creates file cachedInfo.
 func NewFileInfo(name string, directory bool, sizeInBytes int64, modTime time.Time) FileInfo {
-	return FileInfo{
+	fi := FileInfo{
 		name:        name,
 		directory:   directory,
 		sizeInBytes: sizeInBytes,
 		modTime:     modTime,
 	}
+	if directory {
+		fi.mode = os.ModeDir | 0755
+	}
+	return fi
 }
 
 // Name provides the base name of the file.
@@ -40,7 +45,7 @@ func (fi FileInfo) Size() int64 {
 // available on the bucket.
 func (fi FileInfo) Mode() os.FileMode {
 	if fi.directory {
-		return 0755
+		return fi.mode
 	}
 	return 0664
 }

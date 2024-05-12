@@ -164,10 +164,10 @@ func (c *Server) AcceptInboundConnection(conn net.Conn, config *ssh.ServerConfig
 		}
 
 		// Create a new handler for the currently logged in user's server.
-		fs := c.createHandler(sconn.Permissions)
+		handlers := c.createHandler(sconn.Permissions)
 
 		// Create the server instance for the channel using the filesystem we created above.
-		server := sftp.NewRequestServer(channel, fs)
+		server := sftp.NewRequestServer(channel, handlers)
 
 		if err := server.Serve(); err == io.EOF {
 			server.Close()

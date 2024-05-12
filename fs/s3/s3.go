@@ -1,13 +1,13 @@
 package s3
 
 import (
+	"errors"
 	"io"
 	"os"
-	"path/filepath"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/credentials"
-	"github.com/aws/aws-sdk-go/aws/session"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	awshttp "github.com/aws/aws-sdk-go-v2/aws/transport/http"
+	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/pkg/sftp"
 	"go.uber.org/zap"
 
@@ -39,21 +39,12 @@ func (f *Fs) Filewrite(request *sftp.Request) (io.WriterAt, error) {
 	}
 	p := request.Filepath
 	stat, statErr := f.Stat(p)
-	if os.IsNotExist(statErr) {
+	var httpResponseErr *awshttp.ResponseError
+	if errors.As(statErr, &httpResponseErr) && httpResponseErr.HTTPStatusCode() == 404 {
 		// This is a different pathway than just editing an existing file. If it doesn't exist already
 		// we need to determine if this user has permission to create files.
 		if !fs.Can(f.permissions, utils.PermissionFileCreate) {
 			return nil, sftp.ErrSshFxPermissionDenied
-		}
-
-		// Create all of the directories leading up to the location where this file is being created.
-		if err := f.MkdirAll(filepath.Dir(p), 0755); err != nil {
-			f.logger.Error("error making path for file",
-				"source", p,
-				"path", filepath.Dir(p),
-				"err", err,
-			)
-			return nil, sftp.ErrSshFxFailure
 		}
 
 		file, err := f.Create(p)
@@ -61,7 +52,6 @@ func (f *Fs) Filewrite(request *sftp.Request) (io.WriterAt, error) {
 			f.logger.Error("error creating file", "source", p, "err", err)
 			return nil, sftp.ErrSshFxFailure
 		}
-
 		return file, nil
 	}
 	if statErr != nil {
@@ -243,31 +233,22 @@ type Option struct {
 	Secret     string `json:"secret"`
 	DisableSSL bool   `json:"disable_ssl"`
 	PathStyle  bool   `json:"path_style"`
-	OSUser     fs.OsUser
 }
 
 func New(opt Option) (interfaces.Filesystem, error) {
+	creds := aws.NewCredentialsCache(credentials.NewStaticCredentialsProvider(opt.AccessKey, opt.Secret, ""))
 	conf := aws.Config{
-		Region:           aws.String(opt.Region),
-		DisableSSL:       aws.Bool(opt.DisableSSL),
-		S3ForcePathStyle: aws.Bool(opt.PathStyle),
+		Credentials: creds,
+		Region:      opt.Region,
+		EndpointResolverWithOptions: aws.EndpointResolverWithOptionsFunc(func(service, region string, options ...interface{}) (aws.Endpoint, error) {
+			return aws.Endpoint{
+				URL:               opt.Endpoint,
+				SigningRegion:     opt.Region,
+				HostnameImmutable: true,
+			}, nil
+		}),
 	}
 
-	if opt.AccessKey != "" && opt.Secret != "" {
-		conf.Credentials = credentials.NewStaticCredentials(opt.AccessKey, opt.Secret, "")
-	}
-
-	if opt.Endpoint != "" {
-		conf.Endpoint = aws.String(opt.Endpoint)
-	}
-
-	sess, errSession := session.NewSession(&conf)
-
-	if errSession != nil {
-		return nil, errSession
-	}
-
-	s3Fs := NewFs(opt.Bucket, sess)
-	s3Fs.osUser = opt.OSUser
+	s3Fs := NewFsFromConfig(opt.Bucket, conf)
 	return s3Fs, nil
 }

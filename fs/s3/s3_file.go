@@ -2,6 +2,7 @@
 package s3
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -14,13 +15,12 @@ import (
 
 	"github.com/spf13/afero"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/service/s3"
-	"github.com/aws/aws-sdk-go/service/s3/s3manager"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/feature/s3/manager"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 )
 
 // File represents a file in S3.
-// nolint: maligned
 type File struct {
 	fs                       *Fs            // Parent file system
 	name                     string         // Name of the file
@@ -75,25 +75,27 @@ func (f *File) Readdir(n int) ([]os.FileInfo, error) {
 	if name != "" && !strings.HasSuffix(name, "/") {
 		name += "/"
 	}
-	output, err := f.fs.s3API.ListObjectsV2(&s3.ListObjectsV2Input{
+	output, err := f.fs.client.ListObjectsV2(context.Background(), &s3.ListObjectsV2Input{
 		ContinuationToken: f.readdirContinuationToken,
 		Bucket:            aws.String(f.fs.bucket),
-		Prefix:            aws.String(name),
+		Prefix:            &name,
 		Delimiter:         aws.String("/"),
-		MaxKeys:           aws.Int64(int64(n)),
+		MaxKeys:           aws.Int32(int32(n)),
 	})
 	if err != nil {
 		return nil, err
 	}
 	f.readdirContinuationToken = output.NextContinuationToken
-	if !(*output.IsTruncated) {
+	if !*output.IsTruncated {
 		f.readdirNotTruncated = true
 	}
+
 	var fis = make([]os.FileInfo, 0, len(output.CommonPrefixes)+len(output.Contents))
 	for _, subfolder := range output.CommonPrefixes {
 		fis = append(fis, NewFileInfo(path.Base("/"+*subfolder.Prefix), true, 0, time.Unix(0, 0)))
 	}
-	for _, fileObject := range output.Contents {
+	for k := range output.Contents {
+		fileObject := &output.Contents[k]
 		if strings.HasSuffix(*fileObject.Key, "/") {
 			// S3 includes <name>/ in the Contents listing for <name>
 			continue
@@ -139,6 +141,7 @@ func (f *File) Readdirnames(n int) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
+	// nolint: makezero  // we know the exact length
 	names := make([]string, len(fi))
 	for i, f := range fi {
 		_, names[i] = path.Split(f.Name())
@@ -171,6 +174,7 @@ func (f *File) Truncate(int64) error {
 // WriteString is like Write, but writes the contents of string s rather than
 // a slice of bytes.
 func (f *File) WriteString(s string) (int, error) {
+	// nolint: gocritic // can't use f.WriteString because we are implemnting it
 	return f.Write([]byte(s))
 }
 
@@ -213,6 +217,10 @@ func (f *File) Close() error {
 // It returns the number of bytes read and an error, if any.
 // EOF is signaled by a zero count with err set to io.EOF.
 func (f *File) Read(p []byte) (int, error) {
+	if f.streamRead == nil {
+		return 0, io.EOF
+	}
+
 	n, err := f.streamRead.Read(p)
 
 	if err == nil {
@@ -232,7 +240,7 @@ func (f *File) ReadAt(p []byte, off int64) (n int, err error) {
 		return
 	}
 	n, err = f.Read(p)
-	return
+	return n, err
 }
 
 // Seek sets the offset for the next Read or Write on file to offset, interpreted
@@ -304,11 +312,11 @@ func (f *File) openWriteStream() error {
 	f.streamWriteCloseErr = make(chan error)
 	f.streamWrite = writer
 
-	uploader := s3manager.NewUploader(f.fs.session)
+	uploader := manager.NewUploader(f.fs.client)
 	uploader.Concurrency = 1
 
 	go func() {
-		input := &s3manager.UploadInput{
+		input := &s3.PutObjectInput{
 			Bucket: aws.String(f.fs.bucket),
 			Key:    aws.String(f.name),
 			Body:   reader,
@@ -323,7 +331,7 @@ func (f *File) openWriteStream() error {
 			input.ContentType = aws.String(mime.TypeByExtension(filepath.Ext(f.name)))
 		}
 
-		_, err := uploader.Upload(input)
+		_, err := uploader.Upload(context.Background(), input)
 
 		if err != nil {
 			f.streamWriteErr = err
@@ -341,13 +349,13 @@ func (f *File) openReadStream(startAt int64) error {
 		return ErrAlreadyOpened
 	}
 
-	var streamRange *string = nil
+	var streamRange *string
 
 	if startAt > 0 {
 		streamRange = aws.String(fmt.Sprintf("bytes=%d-%d", startAt, f.cachedInfo.Size()))
 	}
 
-	resp, err := f.fs.s3API.GetObject(&s3.GetObjectInput{
+	resp, err := f.fs.client.GetObject(context.Background(), &s3.GetObjectInput{
 		Bucket: aws.String(f.fs.bucket),
 		Key:    aws.String(f.name),
 		Range:  streamRange,
@@ -370,5 +378,5 @@ func (f *File) WriteAt(p []byte, off int64) (n int, err error) {
 		return
 	}
 	n, err = f.Write(p)
-	return
+	return n, err
 }

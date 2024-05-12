@@ -39,7 +39,6 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	s3Opt.OSUser = conf.User
 	// filesystem := afos.New(utils.AbsPath(""))
 	filesystem, err := s3.New(s3Opt)
 	if err != nil {

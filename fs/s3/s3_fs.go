@@ -3,6 +3,7 @@ package s3
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"mime"
@@ -12,17 +13,15 @@ import (
 	"strings"
 	"time"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/awserr"
-	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/s3"
-	"github.com/aws/aws-sdk-go/service/s3/s3manager"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/spf13/afero"
 
 	"github.com/oarkflow/ftp-server/log"
-
-	"github.com/oarkflow/ftp-server/fs"
 )
+
+// https://aws.github.io/aws-sdk-go-v2/docs/migrating/
 
 // Fs is an FS object backed by S3.
 type Fs struct {
@@ -30,27 +29,33 @@ type Fs struct {
 	permissions []string
 	logger      log.Logger
 	readOnly    bool
-	osUser      fs.OsUser
 	FileProps   *UploadedFileProperties // FileProps define the file properties we want to set for all new files
-	bucket      string                  // Bucket name
-	session     *session.Session        // Session config
-	s3API       *s3.S3
+	// config    aws.Config              // Session config
+	client *s3.Client
+	bucket string // Bucket name
 }
 
 // UploadedFileProperties defines all the set properties applied to future files
 type UploadedFileProperties struct {
-	ACL          *string // ACL defines the right to apply
 	CacheControl *string // CacheControl defines the Cache-Control header
 	ContentType  *string // ContentType define the Content-Type header
+	ACL          string  // ACL defines the right to apply
 }
 
-// NewFs creates a new Fs object writing files to a given S3 bucket.
-func NewFs(bucket string, session *session.Session) *Fs {
-	s3Api := s3.New(session)
+// NewFsFromConfig creates a new Fs instance from an AWS Config
+// nolint: gocritic // it's OK to copy this object, it's not very frequent
+func NewFsFromConfig(bucket string, config aws.Config) *Fs {
 	return &Fs{
-		bucket:  bucket,
-		session: session,
-		s3API:   s3Api,
+		bucket: bucket,
+		client: s3.NewFromConfig(config),
+	}
+}
+
+// NewFsFromClient creates a new Fs instance from a S3 client
+func NewFsFromClient(bucket string, client *s3.Client) *Fs {
+	return &Fs{
+		bucket: bucket,
+		client: client,
 	}
 }
 
@@ -67,10 +72,10 @@ var ErrAlreadyOpened = errors.New("already opened")
 var ErrInvalidSeek = errors.New("invalid seek offset")
 
 // Name returns the type of FS object this is: Fs.
-func (Fs) Name() string { return "s3" }
+func (*Fs) Name() string { return "s3" }
 
 // Create a file.
-func (fs Fs) Create(name string) (afero.File, error) {
+func (fs *Fs) Create(name string) (afero.File, error) {
 	{ // It's faster to trigger an explicit empty put object than opening a file for write, closing it and re-opening it
 		req := &s3.PutObjectInput{
 			Bucket: aws.String(fs.bucket),
@@ -87,7 +92,7 @@ func (fs Fs) Create(name string) (afero.File, error) {
 			req.ContentType = aws.String(mime.TypeByExtension(filepath.Ext(name)))
 		}
 
-		_, errPut := fs.s3API.PutObject(req)
+		_, errPut := fs.client.PutObject(context.Background(), req)
 		if errPut != nil {
 			return nil, errPut
 		}
@@ -101,14 +106,16 @@ func (fs Fs) Create(name string) (afero.File, error) {
 	// Create(), like all of S3, is eventually consistent.
 	// To protect against unexpected behavior, have this method
 	// wait until S3 reports the object exists.
-	return file, fs.s3API.WaitUntilObjectExists(&s3.HeadObjectInput{
+	waiter := s3.NewObjectExistsWaiter(fs.client)
+	return file, waiter.Wait(context.Background(), &s3.HeadObjectInput{
 		Bucket: aws.String(fs.bucket),
 		Key:    aws.String(name),
-	})
+	}, 30*time.Second)
 }
 
 // Mkdir makes a directory in S3.
-func (fs Fs) Mkdir(name string, perm os.FileMode) error {
+func (fs *Fs) Mkdir(name string, perm os.FileMode) error {
+	name = sanitize(name)
 	file, err := fs.OpenFile(fmt.Sprintf("%s/", path.Clean(name)), os.O_CREATE, perm)
 	if err == nil {
 		err = file.Close()
@@ -117,7 +124,7 @@ func (fs Fs) Mkdir(name string, perm os.FileMode) error {
 }
 
 // MkdirAll creates a directory and all parent directories if necessary.
-func (fs Fs) MkdirAll(path string, perm os.FileMode) error {
+func (fs *Fs) MkdirAll(path string, perm os.FileMode) error {
 	return fs.Mkdir(path, perm)
 }
 
@@ -128,6 +135,7 @@ func (fs *Fs) Open(name string) (afero.File, error) {
 
 // OpenFile opens a file.
 func (fs *Fs) OpenFile(name string, flag int, _ os.FileMode) (afero.File, error) {
+	name = sanitize(name)
 	file := NewFile(fs, name)
 
 	// Reading and writing is technically supported but can't lead to anything that makes sense
@@ -155,7 +163,6 @@ func (fs *Fs) OpenFile(name string, flag int, _ os.FileMode) (afero.File, error)
 	}
 
 	info, err := file.Stat()
-
 	if err != nil {
 		return nil, err
 	}
@@ -168,7 +175,8 @@ func (fs *Fs) OpenFile(name string, flag int, _ os.FileMode) (afero.File, error)
 }
 
 // Remove a file
-func (fs Fs) Remove(name string) error {
+func (fs *Fs) Remove(name string) error {
+	name = sanitize(name)
 	if _, err := fs.Stat(name); err != nil {
 		return err
 	}
@@ -176,8 +184,8 @@ func (fs Fs) Remove(name string) error {
 }
 
 // forceRemove doesn't error if a file does not exist.
-func (fs Fs) forceRemove(name string) error {
-	_, err := fs.s3API.DeleteObject(&s3.DeleteObjectInput{
+func (fs *Fs) forceRemove(name string) error {
+	_, err := fs.client.DeleteObject(context.Background(), &s3.DeleteObjectInput{
 		Bucket: aws.String(fs.bucket),
 		Key:    aws.String(name),
 	})
@@ -186,6 +194,8 @@ func (fs Fs) forceRemove(name string) error {
 
 // RemoveAll removes a path.
 func (fs *Fs) RemoveAll(name string) error {
+	name = sanitize(name)
+
 	s3dir := NewFile(fs, name)
 	fis, err := s3dir.Readdir(0)
 	if err != nil {
@@ -214,19 +224,22 @@ func (fs *Fs) RemoveAll(name string) error {
 // There is no method to directly rename an S3 object, so the Rename
 // will copy the file to an object with the new name and then delete
 // the original.
-func (fs Fs) Rename(oldname, newname string) error {
+func (fs *Fs) Rename(oldname, newname string) error {
+	oldname = sanitize(oldname)
+	newname = sanitize(newname)
+
 	if oldname == newname {
 		return nil
 	}
-	_, err := fs.s3API.CopyObject(&s3.CopyObjectInput{
+	_, err := fs.client.CopyObject(context.Background(), &s3.CopyObjectInput{
 		Bucket:     aws.String(fs.bucket),
-		CopySource: aws.String(fs.bucket + oldname),
+		CopySource: aws.String(fs.bucket + "/" + oldname),
 		Key:        aws.String(newname),
 	})
 	if err != nil {
 		return err
 	}
-	_, err = fs.s3API.DeleteObject(&s3.DeleteObjectInput{
+	_, err = fs.client.DeleteObject(context.Background(), &s3.DeleteObjectInput{
 		Bucket: aws.String(fs.bucket),
 		Key:    aws.String(oldname),
 	})
@@ -235,44 +248,39 @@ func (fs Fs) Rename(oldname, newname string) error {
 
 // Stat returns a FileInfo describing the named file.
 // If there is an error, it will be of type *os.PathError.
-func (fs Fs) Stat(name string) (os.FileInfo, error) {
-	out, err := fs.s3API.HeadObject(&s3.HeadObjectInput{
+func (fs *Fs) Stat(name string) (os.FileInfo, error) {
+	name = sanitize(name)
+
+	if strings.HasSuffix(name, "/") {
+		return fs.statDirectory(name)
+	}
+
+	out, err := fs.client.HeadObject(context.Background(), &s3.HeadObjectInput{
 		Bucket: aws.String(fs.bucket),
 		Key:    aws.String(name),
 	})
 	if err != nil {
-		var errRequestFailure awserr.RequestFailure
-		if errors.As(err, &errRequestFailure) {
-			if errRequestFailure.StatusCode() == 404 {
-				statDir, errStat := fs.statDirectory(name)
-				return statDir, errStat
-			}
-		}
+		// if it is a not found error, then we try to treat it as a directory
+		// before we give up.
 		return FileInfo{}, &os.PathError{
 			Op:   "stat",
 			Path: name,
 			Err:  err,
 		}
-	} else if strings.HasSuffix(name, "/") {
-		// user asked for a directory, but this is a file
-		return FileInfo{name: name}, nil
-		/*
-			return FileInfo{}, &os.PathError{
-				Op:   "stat",
-				Path: name,
-				Err:  os.ErrNotExist,
-			}
-		*/
 	}
 	return NewFileInfo(path.Base(name), false, *out.ContentLength, *out.LastModified), nil
 }
 
-func (fs Fs) statDirectory(name string) (os.FileInfo, error) {
-	nameClean := path.Clean(name)
-	out, err := fs.s3API.ListObjectsV2(&s3.ListObjectsV2Input{
+func (fs *Fs) statDirectory(name string) (os.FileInfo, error) {
+	// Special case because you can not HeadObject on the bucket itself.
+	if name == "/" {
+		return NewFileInfo(name, true, 0, time.Unix(0, 0)), nil
+	}
+
+	out, err := fs.client.ListObjectsV2(context.Background(), &s3.ListObjectsV2Input{
 		Bucket:  aws.String(fs.bucket),
-		Prefix:  aws.String(strings.TrimPrefix(nameClean, "/")),
-		MaxKeys: aws.Int64(1),
+		Prefix:  aws.String(name),
+		MaxKeys: aws.Int32(1),
 	})
 	if err != nil {
 		return FileInfo{}, &os.PathError{
@@ -292,7 +300,9 @@ func (fs Fs) statDirectory(name string) (os.FileInfo, error) {
 }
 
 // Chmod doesn't exists in S3 but could be implemented by analyzing ACLs
-func (fs Fs) Chmod(name string, mode os.FileMode) error {
+func (fs *Fs) Chmod(name string, mode os.FileMode) error {
+	name = sanitize(name)
+
 	var acl string
 
 	otherRead := mode&(1<<2) != 0
@@ -307,10 +317,10 @@ func (fs Fs) Chmod(name string, mode os.FileMode) error {
 		acl = "private"
 	}
 
-	_, err := fs.s3API.PutObjectAcl(&s3.PutObjectAclInput{
+	_, err := fs.client.PutObjectAcl(context.Background(), &s3.PutObjectAclInput{
 		Bucket: aws.String(fs.bucket),
 		Key:    aws.String(name),
-		ACL:    aws.String(acl),
+		ACL:    types.ObjectCannedACL(acl),
 	})
 	return err
 }
@@ -329,8 +339,8 @@ func (Fs) Chtimes(string, time.Time, time.Time) error {
 // I couldn't find a way to make this code cleaner. It's basically a big copy-paste on two
 // very similar structures.
 func applyFileCreateProps(req *s3.PutObjectInput, p *UploadedFileProperties) {
-	if p.ACL != nil {
-		req.ACL = p.ACL
+	if p.ACL != "" {
+		req.ACL = types.ObjectCannedACL(p.ACL)
 	}
 
 	if p.CacheControl != nil {
@@ -342,16 +352,55 @@ func applyFileCreateProps(req *s3.PutObjectInput, p *UploadedFileProperties) {
 	}
 }
 
-func applyFileWriteProps(req *s3manager.UploadInput, p *UploadedFileProperties) {
-	if p.ACL != nil {
-		req.ACL = p.ACL
+func applyFileWriteProps(input *s3.PutObjectInput, p *UploadedFileProperties) {
+	if p.ACL != "" {
+		input.ACL = types.ObjectCannedACL(p.ACL)
 	}
 
 	if p.CacheControl != nil {
-		req.CacheControl = p.CacheControl
+		input.CacheControl = p.CacheControl
 	}
 
 	if p.ContentType != nil {
-		req.ContentType = p.ContentType
+		input.ContentType = p.ContentType
 	}
+}
+
+// sanitize name to ensure it uses forward slash paths even on Windows systems.
+func sanitize(name string) string {
+	// special case, not sure what an empty value
+	// _SHOULD_ map to, so just return it.
+	// Clean would try to map it to "."
+	if strings.TrimSpace(name) == "" {
+		return ""
+	}
+
+	// safely clean-up the path
+	out := filepath.Clean(name)
+
+	// clean will remove trailing slashes, but we want to preserve it
+	// clean _does_ not strip the leading slash, so we have a special check
+	// for the `/` case.
+	if strings.HasSuffix(name, string(filepath.Separator)) && len(out) > 1 {
+		out += string(filepath.Separator)
+	}
+
+	// On Windows: remove the volume name if it exists,
+	// e.g. remove C: from C:\path\to\file,
+	// Other OSes: a no-op
+	prefix := filepath.VolumeName(out)
+	if prefix != "" {
+		out = strings.TrimPrefix(out, prefix)
+	}
+
+	// s3 requires forward slashes
+	out = filepath.ToSlash(out)
+
+	// a special case for the root path
+	if out == "/" {
+		return out
+	}
+
+	// s3 keys should not start with a slash
+	return strings.TrimPrefix(out, "/")
 }

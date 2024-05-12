@@ -6,7 +6,9 @@ import (
 
 	v2 "github.com/oarkflow/ftp-server/v2"
 	"github.com/oarkflow/ftp-server/v2/fs"
+	"github.com/oarkflow/ftp-server/v2/fs/afos"
 	"github.com/oarkflow/ftp-server/v2/models"
+	"github.com/oarkflow/ftp-server/v2/utils"
 )
 
 type config struct {
@@ -26,8 +28,8 @@ func main() {
 		panic(err)
 	}
 	json.Unmarshal(configFile, &conf)
-
-	server := v2.New()
+	fs := afos.New(utils.AbsPath(""))
+	server := v2.New(fs)
 	for _, user := range conf.Users {
 		server.AddUser(user)
 	}

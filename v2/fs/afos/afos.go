@@ -1,11 +1,14 @@
 package afos
 
 import (
+	"errors"
 	"io"
 	"io/ioutil"
 	"os"
+	"path"
 	"path/filepath"
 	"slices"
+	"strings"
 	"sync"
 
 	"github.com/fclairamb/go-log"
@@ -20,21 +23,61 @@ import (
 
 // Afos ... A file system exposed to a user.
 type Afos struct {
-	UUID          string
-	Permissions   []string
-	ReadOnly      bool
-	User          fs.OsUser
-	PathValidator func(fs interfaces.Filesystem, p string) (string, error)
-	HasDiskSpace  func(fs interfaces.Filesystem) bool
+	id            string
+	basePath      string
+	dataPath      string
+	permissions   []string
+	readOnly      bool
+	osUser        fs.OsUser
+	pathValidator func(fs interfaces.Filesystem, p string) (string, error)
+	hasDiskSpace  func(fs interfaces.Filesystem) bool
 	lock          sync.Mutex
 	logger        log.Logger
 }
 
+func defaultAfos(basePath string) *Afos {
+	dataPath := "data"
+	return &Afos{
+		dataPath: dataPath,
+		osUser: fs.OsUser{
+			UID: 10,
+			GID: 10,
+		},
+		pathValidator: func(fs interfaces.Filesystem, p string) (string, error) {
+			join := path.Join(basePath, dataPath, p)
+			clean := path.Clean(path.Join(basePath, dataPath))
+			if strings.HasPrefix(join, clean) {
+				return join, nil
+			}
+			return "", errors.New("invalid path outside the configured directory was provided")
+		},
+		hasDiskSpace: func(fs interfaces.Filesystem) bool {
+			return true // TODO
+		},
+	}
+}
+
+func New(basePath string, opts ...func(*Afos)) *Afos {
+	svr := defaultAfos(basePath)
+	for _, o := range opts {
+		o(svr)
+	}
+	return svr
+}
+
+func (f *Afos) SetPermissions(p []string) {
+	f.permissions = append(f.permissions, p...)
+}
+
+func (f *Afos) SetID(p string) {
+	f.id = p
+}
+
 func (f *Afos) buildPath(p string) (string, error) {
-	if f.PathValidator == nil {
+	if f.pathValidator == nil {
 		return "", nil
 	}
-	return f.PathValidator(f, p)
+	return f.pathValidator(f, p)
 }
 
 func (f *Afos) SetLogger(logger log.Logger) {
@@ -73,7 +116,7 @@ func (f *Afos) Fileread(request *sftp.Request) (io.ReaderAt, error) {
 
 // Filewrite handles the write actions for a file on the system.
 func (f *Afos) Filewrite(request *sftp.Request) (io.WriterAt, error) {
-	if f.ReadOnly {
+	if f.readOnly {
 		return nil, sftp.ErrSshFxOpUnsupported
 	}
 
@@ -84,7 +127,7 @@ func (f *Afos) Filewrite(request *sftp.Request) (io.WriterAt, error) {
 
 	// If the user doesn't have enough space left on the server it should respond with an
 	// error since we won't be letting them write this file to the disk.
-	if !f.HasDiskSpace(f) {
+	if f.hasDiskSpace != nil && !f.hasDiskSpace(f) {
 		return nil, errs.ErrSSHQuotaExceeded
 	}
 
@@ -119,7 +162,7 @@ func (f *Afos) Filewrite(request *sftp.Request) (io.WriterAt, error) {
 
 		// Not failing here is intentional. We still made the file, it is just owned incorrectly
 		// and will likely cause some issues.
-		if err := os.Chown(p, f.User.UID, f.User.GID); err != nil {
+		if err := os.Chown(p, f.osUser.UID, f.osUser.GID); err != nil {
 			f.logger.Warn("error chowning file", "file", p, "err", err)
 		}
 
@@ -160,7 +203,7 @@ func (f *Afos) Filewrite(request *sftp.Request) (io.WriterAt, error) {
 
 	// Not failing here is intentional. We still made the file, it is just owned incorrectly
 	// and will likely cause some issues.
-	if err := os.Chown(p, f.User.UID, f.User.GID); err != nil {
+	if err := os.Chown(p, f.osUser.UID, f.osUser.GID); err != nil {
 		f.logger.Warn("error chowning file", "file", p, zap.Error(err))
 	}
 
@@ -170,7 +213,7 @@ func (f *Afos) Filewrite(request *sftp.Request) (io.WriterAt, error) {
 // Filecmd hander for basic SFTP system calls related to files, but not anything to do with reading
 // or writing to those files.
 func (f *Afos) Filecmd(request *sftp.Request) error {
-	if f.ReadOnly {
+	if f.readOnly {
 		return sftp.ErrSshFxOpUnsupported
 	}
 
@@ -289,7 +332,7 @@ func (f *Afos) Filecmd(request *sftp.Request) error {
 	// Not failing here is intentional. We still made the file, it is just owned incorrectly
 	// and will likely cause some issues. There is no logical check for if the file was removed
 	// because both of those cases (Rmdir, Remove) have an explicit return rather than break.
-	if err := os.Chown(fileLocation, f.User.UID, f.User.GID); err != nil {
+	if err := os.Chown(fileLocation, f.osUser.UID, f.osUser.GID); err != nil {
 		f.logger.Warn("error chowning file", "file", fileLocation, "err", err)
 	}
 
@@ -347,8 +390,8 @@ func (f *Afos) can(permission string) bool {
 	// Server owners and super admins have their permissions returned as '[*]' via the Panel
 	// API, so for the sake of speed do an initial check for that before iterating over the
 	// entire array of permissions.
-	if len(f.Permissions) == 1 && f.Permissions[0] == "*" {
+	if len(f.permissions) == 1 && f.permissions[0] == "*" {
 		return true
 	}
-	return slices.Contains(f.Permissions, permission)
+	return slices.Contains(f.permissions, permission)
 }

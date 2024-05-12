@@ -5,7 +5,6 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/pem"
-	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -29,56 +28,36 @@ import (
 type Server struct {
 	basePath            string
 	sshPath             string
-	dataPath            string
 	privateKey          string
 	publicKey           string
-	readOnly            bool
 	port                int
 	address             string
-	user                fs.OsUser
 	userProvider        interfaces.UserProvider
+	fs                  interfaces.Filesystem
 	logger              log.Logger
-	pathValidator       func(fs interfaces.Filesystem, p string) (string, error)
-	diskSpaceValidator  func(fs interfaces.Filesystem) bool
 	credentialValidator func(server *Server, r fs.AuthenticationRequest) (*fs.AuthenticationResponse, error)
 }
 
-func defaultServer() *Server {
+func defaultServer(filesystem interfaces.Filesystem) *Server {
 	basePath := utils.AbsPath("")
-	dataPath := "data"
 	userProvider := providers.NewJsonFileProvider("sha256", "")
 	return &Server{
-		basePath:   basePath,
-		dataPath:   dataPath,
-		sshPath:    ".ssh",
-		port:       2022,
-		privateKey: "id_rsa",
-		address:    "0.0.0.0",
-		user: fs.OsUser{
-			UID: 10,
-			GID: 10,
-		},
+		basePath:     basePath,
+		sshPath:      ".ssh",
+		port:         2022,
+		privateKey:   "id_rsa",
+		address:      "0.0.0.0",
 		logger:       oarklog.Default(),
+		fs:           filesystem,
 		userProvider: userProvider,
-		pathValidator: func(fs interfaces.Filesystem, p string) (string, error) {
-			join := path.Join(basePath, dataPath, p)
-			clean := path.Clean(path.Join(basePath, dataPath))
-			if strings.HasPrefix(join, clean) {
-				return join, nil
-			}
-			return "", errors.New("invalid path outside the configured directory was provided")
-		},
-		diskSpaceValidator: func(fs interfaces.Filesystem) bool {
-			return true // TODO
-		},
 		credentialValidator: func(server *Server, r fs.AuthenticationRequest) (*fs.AuthenticationResponse, error) {
 			return server.userProvider.Login(r.User, r.Pass)
 		},
 	}
 }
 
-func New(opts ...func(*Server)) *Server {
-	svr := defaultServer()
+func New(filesystem interfaces.Filesystem, opts ...func(*Server)) *Server {
+	svr := defaultServer(filesystem)
 	for _, o := range opts {
 		o(svr)
 	}
@@ -222,20 +201,17 @@ func (c *Server) AcceptInboundConnection(conn net.Conn, config *ssh.ServerConfig
 // be the base directory for a server. All actions done on the server will be
 // relative to that directory, and the user will not be able to escape out of it.
 func (c *Server) createHandler(perm *ssh.Permissions) sftp.Handlers {
-	p := afos.Afos{
-		UUID:          perm.Extensions["uuid"],
-		Permissions:   strings.Split(perm.Extensions["permissions"], ","),
-		ReadOnly:      c.readOnly,
-		User:          c.user,
-		HasDiskSpace:  c.diskSpaceValidator,
-		PathValidator: c.pathValidator,
+	if c.fs == nil {
+		c.fs = afos.New(c.basePath)
 	}
-	p.SetLogger(c.logger)
+	c.fs.SetPermissions(strings.Split(perm.Extensions["permissions"], ","))
+	c.fs.SetID(perm.Extensions["uuid"])
+	c.fs.SetLogger(c.logger)
 	return sftp.Handlers{
-		FileGet:  &p,
-		FilePut:  &p,
-		FileCmd:  &p,
-		FileList: &p,
+		FileGet:  c.fs,
+		FilePut:  c.fs,
+		FileCmd:  c.fs,
+		FileList: c.fs,
 	}
 }
 

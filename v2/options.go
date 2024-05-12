@@ -17,12 +17,6 @@ func WithBasePath(path string) func(server *Server) {
 	}
 }
 
-func WithReadOnly(val bool) func(server *Server) {
-	return func(o *Server) {
-		o.readOnly = val
-	}
-}
-
 func WithPort(val int) func(server *Server) {
 	return func(o *Server) {
 		o.port = val
@@ -41,12 +35,6 @@ func WithSSHPath(val string) func(server *Server) {
 	}
 }
 
-func WithDataPath(val string) func(server *Server) {
-	return func(o *Server) {
-		o.dataPath = val
-	}
-}
-
 func WithPrivateKey(val string) func(server *Server) {
 	return func(o *Server) {
 		o.privateKey = val
@@ -59,26 +47,14 @@ func WithPublicKey(val string) func(server *Server) {
 	}
 }
 
-func WithOsUser(val fs.OsUser) func(server *Server) {
-	return func(o *Server) {
-		o.user = val
-	}
-}
-
-func WithDiskSpaceValidator(val func(fs interfaces.Filesystem) bool) func(server *Server) {
-	return func(o *Server) {
-		o.diskSpaceValidator = val
-	}
-}
-
-func WithPathValidator(val func(fs interfaces.Filesystem, p string) (string, error)) func(server *Server) {
-	return func(o *Server) {
-		o.pathValidator = val
-	}
-}
-
 func WithCredentialValidator(val func(server *Server, r fs.AuthenticationRequest) (*fs.AuthenticationResponse, error)) func(server *Server) {
 	return func(o *Server) {
 		o.credentialValidator = val
+	}
+}
+
+func WithFilesystem(val interfaces.Filesystem) func(server *Server) {
+	return func(o *Server) {
+		o.fs = val
 	}
 }

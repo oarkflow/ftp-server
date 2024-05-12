@@ -13,4 +13,6 @@ type Filesystem interface {
 	Filecmd(request *sftp.Request) error
 	Filelist(request *sftp.Request) (sftp.ListerAt, error)
 	SetLogger(logger log.Logger)
+	SetPermissions(p []string)
+	SetID(p string)
 }

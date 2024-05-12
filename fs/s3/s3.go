@@ -1,14 +1,14 @@
 package s3
 
 import (
-	"errors"
-	"fmt"
+	"context"
 	"io"
 	"os"
+	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
-	awshttp "github.com/aws/aws-sdk-go-v2/aws/transport/http"
 	"github.com/aws/aws-sdk-go-v2/credentials"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/pkg/sftp"
 
 	"github.com/oarkflow/ftp-server/log"
@@ -18,70 +18,49 @@ import (
 	"github.com/oarkflow/ftp-server/utils"
 )
 
-type S3 struct {
-	*Fs
+func (f *Fs) fileread(request *sftp.Request) (io.ReaderAt, error) {
+	switch request.Method {
+	case "Get":
+		object, err := f.client.GetObject(context.Background(), &s3.GetObjectInput{
+			Bucket: aws.String(f.bucket),
+			Key:    aws.String(strings.TrimPrefix(request.Filepath, "/")),
+		})
+		if err != nil {
+			return nil, err
+		} else {
+			return reader{object}, nil
+		}
+	default:
+		return nil, sftp.ErrSSHFxOpUnsupported
+	}
 }
 
-func (f *S3) Fileread(request *sftp.Request) (io.ReaderAt, error) {
-	// Check first if the user can actually open and view a file. This permission is named
-	// really poorly, but it is checking if they can read. There is an addition permission,
-	// "save-files" which determines if they can write that file.
+func (f *Fs) Fileread(request *sftp.Request) (io.ReaderAt, error) {
 	if !fs.Can(f.permissions, utils.PermissionFileReadContent) {
 		return nil, sftp.ErrSshFxPermissionDenied
 	}
-	file, err := f.Open(request.Filepath)
-	if err != nil {
-		f.logger.Error("could not open file for reading", "source", request.Filepath, "err", err)
-		return nil, sftp.ErrSshFxFailure
+	return f.fileread(request)
+}
+
+func (f *Fs) filewrite(request *sftp.Request) (io.WriterAt, error) {
+	switch request.Method {
+	case "Put":
+		return newWriter(context.Background(), f.client, f.bucket, strings.TrimPrefix(request.Filepath, "/"))
+	case "Open":
+		return nil, sftp.ErrSSHFxOpUnsupported
+	default:
+		return nil, sftp.ErrSSHFxOpUnsupported
 	}
-	return file, nil
 }
 
-func (f *S3) OpenFile(r *sftp.Request) (sftp.WriterAtReaderAt, error) {
-	fmt.Println(r)
-	return nil, nil
-}
-
-func (f *S3) Filewrite(request *sftp.Request) (io.WriterAt, error) {
+func (f *Fs) Filewrite(request *sftp.Request) (io.WriterAt, error) {
 	if f.readOnly {
 		return nil, sftp.ErrSshFxOpUnsupported
 	}
-	p := request.Filepath
-	stat, statErr := f.Stat(p)
-	var httpResponseErr *awshttp.ResponseError
-	if errors.As(statErr, &httpResponseErr) && httpResponseErr.HTTPStatusCode() == 404 {
-		// This is a different pathway than just editing an existing file. If it doesn't exist already
-		// we need to determine if this user has permission to create files.
-		if !fs.Can(f.permissions, utils.PermissionFileCreate) {
-			return nil, sftp.ErrSshFxPermissionDenied
-		}
-		return f.OpenFile(request)
-	}
-	if statErr != nil {
-		f.logger.Error("error performing file stat", "source", p, "err", statErr)
-		return nil, sftp.ErrSshFxFailure
-	}
-
-	if !fs.Can(f.permissions, utils.PermissionFileUpdate) {
-		return nil, sftp.ErrSshFxPermissionDenied
-	}
-	if stat.IsDir() {
-		f.logger.Warn("attempted to open a directory for writing to", "source", p)
-		return nil, sftp.ErrSshFxOpUnsupported
-	}
-	file, err := f.Create(p)
-	if err != nil {
-		f.logger.Error("error opening existing file",
-			"flags", request.Flags,
-			"source", p,
-			"err", err,
-		)
-		return nil, sftp.ErrSshFxFailure
-	}
-	return file, nil
+	return f.filewrite(request)
 }
 
-func (f *S3) Filecmd(request *sftp.Request) error {
+func (f *Fs) Filecmd(request *sftp.Request) error {
 	if f.readOnly {
 		return sftp.ErrSshFxOpUnsupported
 	}
@@ -166,14 +145,14 @@ func (f *S3) Filecmd(request *sftp.Request) error {
 	return sftp.ErrSshFxOk
 }
 
-func (f *S3) Filelist(request *sftp.Request) (sftp.ListerAt, error) {
+func (f *Fs) Filelist(request *sftp.Request) (sftp.ListerAt, error) {
 	p := request.Filepath
 	switch request.Method {
 	case "List":
 		if !fs.Can(f.permissions, utils.PermissionFileRead) {
 			return nil, sftp.ErrSshFxPermissionDenied
 		}
-		file := NewFile(f.Fs, p)
+		file := NewFile(f, p)
 		files, err := file.ReaddirAll()
 		if err != nil {
 			f.logger.Error("error listing directory", "err", err)
@@ -205,19 +184,19 @@ func (f *S3) Filelist(request *sftp.Request) (sftp.ListerAt, error) {
 	}
 }
 
-func (f *S3) SetLogger(logger log.Logger) {
+func (f *Fs) SetLogger(logger log.Logger) {
 	f.logger = logger
 }
 
-func (f *S3) SetPermissions(p []string) {
+func (f *Fs) SetPermissions(p []string) {
 	f.permissions = append(f.permissions, p...)
 }
 
-func (f *S3) SetID(p string) {
+func (f *Fs) SetID(p string) {
 	f.id = p
 }
 
-func (f *S3) Type() string {
+func (f *Fs) Type() string {
 	return "s3"
 }
 
@@ -244,5 +223,5 @@ func New(opt Option) (interfaces.Filesystem, error) {
 	}
 
 	s3Fs := NewFsFromConfig(opt.Bucket, conf)
-	return &S3{Fs: s3Fs}, nil
+	return s3Fs, nil
 }

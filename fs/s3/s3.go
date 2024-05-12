@@ -45,8 +45,6 @@ func (f *Fs) Filewrite(request *sftp.Request) (io.WriterAt, error) {
 	switch request.Method {
 	case "Put":
 		return newWriter(context.Background(), f.client, f.bucket, strings.TrimPrefix(request.Filepath, "/"))
-	case "Open":
-		return nil, sftp.ErrSSHFxOpUnsupported
 	default:
 		return nil, sftp.ErrSSHFxOpUnsupported
 	}

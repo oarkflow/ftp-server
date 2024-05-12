@@ -16,13 +16,13 @@ import (
 	"golang.org/x/crypto/ssh"
 
 	"github.com/oarkflow/ftp-server/log"
+	"github.com/oarkflow/ftp-server/providers"
 
 	"github.com/oarkflow/ftp-server/fs"
 	"github.com/oarkflow/ftp-server/fs/afos"
 	interfaces2 "github.com/oarkflow/ftp-server/interfaces"
 	"github.com/oarkflow/ftp-server/log/oarklog"
 	"github.com/oarkflow/ftp-server/models"
-	"github.com/oarkflow/ftp-server/providers"
 	"github.com/oarkflow/ftp-server/utils"
 )
 

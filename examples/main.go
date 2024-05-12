@@ -5,7 +5,6 @@ import (
 	"os"
 
 	v2 "github.com/oarkflow/ftp-server"
-	"github.com/oarkflow/ftp-server/fs"
 	"github.com/oarkflow/ftp-server/fs/s3"
 	"github.com/oarkflow/ftp-server/models"
 )
@@ -14,7 +13,6 @@ type config struct {
 	Users       map[string]models.User `json:"users"`
 	BindAddress string                 `json:"bind"`
 	Filepath    string                 `json:"files"`
-	User        fs.OsUser              `json:"osUser"`
 	Port        int                    `json:"port"`
 	ReadOnly    bool                   `json:"readOnly"`
 }
@@ -44,7 +42,7 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	server := v2.New(filesystem)
+	server := v2.New(v2.NewFS(filesystem))
 	for _, user := range conf.Users {
 		server.AddUser(user)
 	}

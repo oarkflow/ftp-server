@@ -6,11 +6,6 @@ import (
 	"slices"
 )
 
-type OsUser struct {
-	UID int
-	GID int
-}
-
 // AuthenticationRequest ... An authentication request to the SFTP server.
 type AuthenticationRequest struct {
 	User          string `json:"username"`

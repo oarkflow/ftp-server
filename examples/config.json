@@ -3,7 +3,6 @@
 	"port": 2022,
 	"bind": "",
 	"files": "/Users/sujit/Sites/clear/ftpserverlib/examples/data",
-	"osUser": { "uid": 10, "gid": 10 },
 	"users": {
 		"testuser": {
 			"username": "testuser",

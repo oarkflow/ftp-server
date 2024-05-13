@@ -48,6 +48,10 @@ type Notification struct {
 }
 
 func (f *FS) Notify(request *sftp.Request, err error) {
+	method := request.Method
+	if method == "List" {
+		return
+	}
 	notification := Notification{Time: time.Now().UTC(), FsType: f.Type()}
 	keyvals := []any{"fs_type", f.Type()}
 	for key, val := range f.fs.Context() {
@@ -62,9 +66,9 @@ func (f *FS) Notify(request *sftp.Request, err error) {
 		}
 		keyvals = append(keyvals, key, val)
 	}
-	notification.Event = request.Method
+	notification.Event = method
 	notification.Subject = request.Filepath
-	keyvals = append(keyvals, "event", request.Method, "subject", request.Filepath)
+	keyvals = append(keyvals, "event", method, "subject", request.Filepath)
 	notification.Target = request.Target
 	if request.Target != "" {
 		keyvals = append(keyvals, "target", request.Target)

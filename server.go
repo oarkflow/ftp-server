@@ -1,16 +1,17 @@
-package ftpserverlib
+package ftpserver
 
 import (
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
+	"encoding/json"
 	"encoding/pem"
 	"fmt"
 	"io"
 	"net"
 	"os"
 	"path"
-	"strings"
+	"slices"
 	"time"
 
 	"github.com/pkg/sftp"
@@ -20,28 +21,28 @@ import (
 	"github.com/oarkflow/ftp-server/providers"
 
 	"github.com/oarkflow/ftp-server/fs"
-	"github.com/oarkflow/ftp-server/fs/afos"
 	"github.com/oarkflow/ftp-server/interfaces"
 	"github.com/oarkflow/ftp-server/log/oarklog"
 	"github.com/oarkflow/ftp-server/models"
 	"github.com/oarkflow/ftp-server/utils"
 )
 
+type NotificationHandler func(notification Notification) error
 type Server struct {
-	userProvider        interfaces.UserProvider
-	fs                  interfaces.Filesystem
-	logger              log.Logger
-	credentialValidator func(server *Server, r fs.AuthenticationRequest) (*fs.AuthenticationResponse, error)
-	basePath            string
-	sshPath             string
-	privateKey          string
-	publicKey           string
-	address             string
-	port                int
-	notify              bool
+	userProvider         interfaces.UserProvider
+	logger               log.Logger
+	credentialValidator  func(server *Server, r fs.AuthenticationRequest) (*fs.AuthenticationResponse, error)
+	notificationCallback NotificationHandler
+	basePath             string
+	sshPath              string
+	privateKey           string
+	publicKey            string
+	address              string
+	port                 int
+	notify               bool
 }
 
-func defaultServer(filesystem interfaces.Filesystem) *Server {
+func defaultServer() *Server {
 	basePath := utils.AbsPath("")
 	userProvider := providers.NewJsonFileProvider("sha256", "")
 	return &Server{
@@ -51,7 +52,6 @@ func defaultServer(filesystem interfaces.Filesystem) *Server {
 		privateKey:   "id_rsa",
 		address:      "0.0.0.0",
 		logger:       oarklog.Default(),
-		fs:           filesystem,
 		notify:       true,
 		userProvider: userProvider,
 		credentialValidator: func(server *Server, r fs.AuthenticationRequest) (*fs.AuthenticationResponse, error) {
@@ -60,13 +60,14 @@ func defaultServer(filesystem interfaces.Filesystem) *Server {
 	}
 }
 
-func New(filesystem interfaces.Filesystem, opts ...func(*Server)) *Server {
-	svr := defaultServer(filesystem)
+func New(opts ...func(*Server)) *Server {
+	svr := defaultServer()
 	return newServer(svr, opts...)
 }
 
-func NewWithNotify(filesystem interfaces.Filesystem, opts ...func(*Server)) *Server {
-	svr := defaultServer(NewFS(filesystem))
+func NewWithNotify(opts ...func(*Server)) *Server {
+	svr := defaultServer()
+	svr.notify = true
 	return newServer(svr, opts...)
 }
 
@@ -74,7 +75,6 @@ func newServer(svr *Server, opts ...func(*Server)) *Server {
 	for _, o := range opts {
 		o(svr)
 	}
-	svr.fs.SetLogger(svr.logger)
 	return svr
 }
 
@@ -94,18 +94,33 @@ func (c *Server) Validate(conn ssh.ConnMetadata, pass []byte) (*ssh.Permissions,
 	if err != nil {
 		return nil, err
 	}
+	fst, err := resp.User.GetFilesystem()
+	if err != nil {
+		return nil, err
+	}
+	useDefaultFS := "false"
+	var filesystem string
+	if fst != nil {
+		fsBytes, err := json.Marshal(fst)
+		if err != nil {
+			return nil, err
+		}
+		filesystem = string(fsBytes)
+	} else {
+		useDefaultFS = "true"
+	}
 	sshPerm := &ssh.Permissions{
 		Extensions: map[string]string{
 			"uuid":           resp.Server,
 			"user":           conn.User(),
 			"remote_addr":    conn.RemoteAddr().String(),
-			"permissions":    strings.Join(resp.Permissions, ","),
+			"filesystem":     filesystem,
+			"default_fs":     useDefaultFS,
 			"client_version": string(conn.ClientVersion()),
 			"server_version": string(conn.ServerVersion()),
 			"login_at":       time.Now().UTC().String(),
 		},
 	}
-
 	return sshPerm, nil
 }
 
@@ -120,7 +135,7 @@ func (c *Server) Initialize() error {
 		return err
 	}
 
-	c.logger.Info("sftp subsystem listening for connections", "host", c.address, "port", c.port, "fs_type", c.fs.Type())
+	c.logger.Info("sftp subsystem listening for connections", "host", c.address, "port", c.port)
 
 	for {
 		conn, _ := listener.Accept()
@@ -134,57 +149,43 @@ func (c *Server) Initialize() error {
 // we should serve the request or not.
 func (c *Server) AcceptInboundConnection(conn net.Conn, config *ssh.ServerConfig) {
 	defer conn.Close()
-
-	// Before beginning a handshake must be performed on the incoming net.Conn
 	sconn, chans, reqs, err := ssh.NewServerConn(conn, config)
 	if err != nil {
 		return
 	}
 	defer sconn.Close()
-
 	go ssh.DiscardRequests(reqs)
-
 	for newChannel := range chans {
-		// If its not a session channel we just move on because its not something we
-		// know how to handle at this point.
 		if newChannel.ChannelType() != "session" {
 			newChannel.Reject(ssh.UnknownChannelType, "unknown channel type")
 			continue
 		}
-
 		channel, requests, err := newChannel.Accept()
 		if err != nil {
 			continue
 		}
-
-		// Channels have a type that is dependent on the protocol. For SFTP this is "subsystem"
-		// with a payload that (should) be "sftp". Discard anything else we receive ("pty", "shell", etc)
 		go func(in <-chan *ssh.Request) {
 			for req := range in {
 				ok := false
-
 				switch req.Type {
 				case "subsystem":
 					if string(req.Payload[4:]) == "sftp" {
 						ok = true
 					}
 				}
-
 				req.Reply(ok, nil)
 			}
 		}(requests)
-
-		// Configure the user's home folder for the rest of the request cycle.
 		if sconn.Permissions.Extensions["uuid"] == "" {
 			continue
 		}
-
-		// Create a new handler for the currently logged in user's server.
-		handlers := c.createHandler(sconn)
-
-		// Create the server instance for the channel using the filesystem we created above.
+		handlers, err := c.createHandler(sconn)
+		if err != nil {
+			newChannel.Reject(ssh.ConnectionFailed, err.Error())
+			channel.Close()
+			return
+		}
 		server := sftp.NewRequestServer(channel, handlers)
-
 		if err := server.Serve(); err == io.EOF {
 			server.Close()
 		}
@@ -194,28 +195,25 @@ func (c *Server) AcceptInboundConnection(conn net.Conn, config *ssh.ServerConfig
 // Creates a new SFTP handler for a given server. The directory argument should
 // be the base directory for a server. All actions done on the server will be
 // relative to that directory, and the user will not be able to escape out of it.
-func (c *Server) createHandler(sconn *ssh.ServerConn) sftp.Handlers {
-	if c.fs == nil {
-		c.fs = afos.New(c.basePath)
-		c.fs.SetLogger(c.logger)
+func (c *Server) createHandler(sconn *ssh.ServerConn) (sftp.Handlers, error) {
+	fst, err := c.getUserFilesystem(sconn, c.basePath)
+	if err != nil {
+		return sftp.Handlers{}, err
+	}
+	if c.notify {
+		fst = NewFS(fst, c.notificationCallback)
 	}
 	ext := sconn.Permissions.Extensions
 	ctx := make(map[string]string)
-	for key, val := range sconn.Permissions.Extensions {
-		if key != "permissions" {
+	for key, val := range ext {
+		if !slices.Contains([]string{"filesystem", "default_fs", "server_version", "login_at", "uuid"}, key) {
 			ctx[key] = val
 		}
 	}
-	c.fs.SetConn(sconn)
-	c.fs.SetContext(ctx)
-	c.fs.SetPermissions(strings.Split(ext["permissions"], ","))
-	c.fs.SetID(ext["uuid"])
-	return sftp.Handlers{
-		FileGet:  c.fs,
-		FilePut:  c.fs,
-		FileCmd:  c.fs,
-		FileList: c.fs,
-	}
+	fst.SetConn(sconn)
+	fst.SetContext(ctx)
+	fst.SetID(ext["uuid"])
+	return sftp.Handlers{FileGet: fst, FilePut: fst, FileCmd: fst, FileList: fst}, nil
 }
 
 func (c *Server) getSSHPath() string {

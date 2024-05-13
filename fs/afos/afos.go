@@ -381,5 +381,5 @@ func (f *Afos) Filelist(request *sftp.Request) (sftp.ListerAt, error) {
 }
 
 func (f *Afos) Type() string {
-	return "afos"
+	return "os"
 }

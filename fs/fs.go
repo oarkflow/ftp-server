@@ -4,6 +4,8 @@ import (
 	"io"
 	"os"
 	"slices"
+
+	"github.com/oarkflow/ftp-server/models"
 )
 
 // AuthenticationRequest ... An authentication request to the SFTP server.
@@ -17,9 +19,9 @@ type AuthenticationRequest struct {
 
 // AuthenticationResponse ... An authentication response from the SFTP server.
 type AuthenticationResponse struct {
-	Server      string   `json:"server"`
-	Token       string   `json:"token"`
-	Permissions []string `json:"permissions"`
+	Server string      `json:"server"`
+	Token  string      `json:"token"`
+	User   models.User `json:"user"`
 }
 
 // ListerAt ... A list of files.

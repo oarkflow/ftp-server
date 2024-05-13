@@ -27,9 +27,9 @@ func (p *JsonFileProvider) Login(username, pass string) (*fs.AuthenticationRespo
 	}
 	n, _ := rand.Int(rand.Reader, big.NewInt(9223372036854775807))
 	return &fs.AuthenticationResponse{
-		Server:      "none",
-		Token:       n.String(),
-		Permissions: user.Permissions,
+		Server: "none",
+		Token:  n.String(),
+		User:   user,
 	}, nil
 }
 

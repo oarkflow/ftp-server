@@ -1,4 +1,4 @@
-package ftpserverlib
+package ftpserver
 
 import (
 	"github.com/oarkflow/ftp-server/fs"
@@ -53,8 +53,8 @@ func WithCredentialValidator(val func(server *Server, r fs.AuthenticationRequest
 	}
 }
 
-func WithFilesystem(val interfaces2.Filesystem) func(server *Server) {
+func WithNotificationCallback(callback NotificationHandler) func(srv *Server) {
 	return func(o *Server) {
-		o.fs = val
+		o.notificationCallback = callback
 	}
 }

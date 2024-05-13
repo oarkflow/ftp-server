@@ -5,5 +5,5 @@ ftpserver
 debug
 __debug_bin*
 *.toml
-/examples/creds.json
 config.json
+users.json

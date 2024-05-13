@@ -1,4 +1,4 @@
-package interfaces
+package fs
 
 import (
 	"io"
@@ -9,7 +9,7 @@ import (
 	"github.com/oarkflow/ftp-server/log"
 )
 
-type Filesystem interface {
+type FS interface {
 	Fileread(request *sftp.Request) (io.ReaderAt, error)
 	Filewrite(request *sftp.Request) (io.WriterAt, error)
 	Filecmd(request *sftp.Request) error

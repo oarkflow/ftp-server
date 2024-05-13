@@ -9,21 +9,20 @@ import (
 	"github.com/pkg/sftp"
 	"golang.org/x/crypto/ssh"
 
+	"github.com/oarkflow/ftp-server/fs"
 	"github.com/oarkflow/ftp-server/fs/afos"
 	"github.com/oarkflow/ftp-server/fs/s3"
 	"github.com/oarkflow/ftp-server/log"
 	"github.com/oarkflow/ftp-server/models"
 	"github.com/oarkflow/ftp-server/providers"
-
-	"github.com/oarkflow/ftp-server/interfaces"
 )
 
 type FS struct {
-	fs       interfaces.Filesystem
+	fs       fs.FS
 	callback NotificationHandler
 }
 
-func NewFS(fs interfaces.Filesystem, callback NotificationHandler) interfaces.Filesystem {
+func NewFS(fs fs.FS, callback NotificationHandler) fs.FS {
 	return &FS{fs: fs, callback: callback}
 }
 
@@ -157,7 +156,7 @@ func (f *FS) Type() string {
 	return f.fs.Type()
 }
 
-func (c *Server) getUserFilesystem(sconn *ssh.ServerConn, path string) (interfaces.Filesystem, error) {
+func (c *Server) getUserFilesystem(sconn *ssh.ServerConn, path string) (fs.FS, error) {
 	var userFS models.Filesystem
 	if useDefaultFS, exists := sconn.Permissions.Extensions["default_fs"]; exists && useDefaultFS == "true" {
 		fst := afos.New(path)

@@ -17,15 +17,14 @@ import (
 
 	"github.com/oarkflow/ftp-server/errs"
 	"github.com/oarkflow/ftp-server/fs"
-	"github.com/oarkflow/ftp-server/interfaces"
 	"github.com/oarkflow/ftp-server/utils"
 )
 
 // Afos ... A file system exposed to a user.
 type Afos struct {
 	logger        log.Logger
-	pathValidator func(fs interfaces.Filesystem, p string) (string, error)
-	hasDiskSpace  func(fs interfaces.Filesystem) bool
+	pathValidator func(fs fs.FS, p string) (string, error)
+	hasDiskSpace  func(fs fs.FS) bool
 	id            string
 	basePath      string
 	dataPath      string
@@ -40,7 +39,7 @@ func defaultAfos(basePath string) *Afos {
 	dataPath := "data"
 	return &Afos{
 		dataPath: dataPath,
-		pathValidator: func(fs interfaces.Filesystem, p string) (string, error) {
+		pathValidator: func(fs fs.FS, p string) (string, error) {
 			join := path.Join(basePath, dataPath, p)
 			clean := path.Clean(path.Join(basePath, dataPath))
 			if strings.HasPrefix(join, clean) {
@@ -48,13 +47,13 @@ func defaultAfos(basePath string) *Afos {
 			}
 			return "", errors.New("invalid path outside the configured directory was provided")
 		},
-		hasDiskSpace: func(fs interfaces.Filesystem) bool {
+		hasDiskSpace: func(fs fs.FS) bool {
 			return true // TODO
 		},
 	}
 }
 
-func New(basePath string, opts ...func(*Afos)) interfaces.Filesystem {
+func New(basePath string, opts ...func(*Afos)) fs.FS {
 	svr := defaultAfos(basePath)
 	for _, o := range opts {
 		o(svr)

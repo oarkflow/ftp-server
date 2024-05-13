@@ -15,7 +15,6 @@ import (
 	"github.com/oarkflow/ftp-server/log"
 
 	"github.com/oarkflow/ftp-server/fs"
-	"github.com/oarkflow/ftp-server/interfaces"
 	"github.com/oarkflow/ftp-server/utils"
 )
 
@@ -223,7 +222,7 @@ type Option struct {
 	Secret    string `json:"secret"`
 }
 
-func New(opt Option) (interfaces.Filesystem, error) {
+func New(opt Option) (fs.FS, error) {
 	creds := aws.NewCredentialsCache(credentials.NewStaticCredentialsProvider(opt.AccessKey, opt.Secret, ""))
 	conf := aws.Config{
 		Credentials: creds,

@@ -1,7 +1,7 @@
 package afos
 
 import (
-	"github.com/oarkflow/ftp-server/interfaces"
+	"github.com/oarkflow/ftp-server/fs"
 )
 
 func WithDataPath(val string) func(server *Afos) {
@@ -22,13 +22,13 @@ func WithReadOnly(val bool) func(server *Afos) {
 	}
 }
 
-func WithDiskSpaceValidator(val func(fs interfaces.Filesystem) bool) func(server *Afos) {
+func WithDiskSpaceValidator(val func(fs fs.FS) bool) func(server *Afos) {
 	return func(o *Afos) {
 		o.hasDiskSpace = val
 	}
 }
 
-func WithPathValidator(val func(fs interfaces.Filesystem, p string) (string, error)) func(server *Afos) {
+func WithPathValidator(val func(fs fs.FS, p string) (string, error)) func(server *Afos) {
 	return func(o *Afos) {
 		o.pathValidator = val
 	}

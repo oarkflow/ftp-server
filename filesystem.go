@@ -12,7 +12,8 @@ import (
 )
 
 type FS struct {
-	fs interfaces.Filesystem
+	fs     interfaces.Filesystem
+	logger log.Logger
 }
 
 func NewFS(fs interfaces.Filesystem) interfaces.Filesystem {
@@ -66,6 +67,7 @@ func (f *FS) Filelist(request *sftp.Request) (sftp.ListerAt, error) {
 
 func (f *FS) SetLogger(logger log.Logger) {
 	f.fs.SetLogger(logger)
+	f.logger = logger
 }
 
 func (f *FS) SetPermissions(p []string) {

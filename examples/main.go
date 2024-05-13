@@ -42,7 +42,7 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	server := v2.New(v2.NewFS(filesystem))
+	server := v2.NewWithNotify(filesystem)
 	for _, user := range conf.Users {
 		server.AddUser(user)
 	}

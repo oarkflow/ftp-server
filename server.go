@@ -20,15 +20,15 @@ import (
 
 	"github.com/oarkflow/ftp-server/fs"
 	"github.com/oarkflow/ftp-server/fs/afos"
-	interfaces2 "github.com/oarkflow/ftp-server/interfaces"
+	"github.com/oarkflow/ftp-server/interfaces"
 	"github.com/oarkflow/ftp-server/log/oarklog"
 	"github.com/oarkflow/ftp-server/models"
 	"github.com/oarkflow/ftp-server/utils"
 )
 
 type Server struct {
-	userProvider        interfaces2.UserProvider
-	fs                  interfaces2.Filesystem
+	userProvider        interfaces.UserProvider
+	fs                  interfaces.Filesystem
 	logger              log.Logger
 	credentialValidator func(server *Server, r fs.AuthenticationRequest) (*fs.AuthenticationResponse, error)
 	basePath            string
@@ -37,9 +37,10 @@ type Server struct {
 	publicKey           string
 	address             string
 	port                int
+	notify              bool
 }
 
-func defaultServer(filesystem interfaces2.Filesystem) *Server {
+func defaultServer(filesystem interfaces.Filesystem) *Server {
 	basePath := utils.AbsPath("")
 	userProvider := providers.NewJsonFileProvider("sha256", "")
 	return &Server{
@@ -50,6 +51,7 @@ func defaultServer(filesystem interfaces2.Filesystem) *Server {
 		address:      "0.0.0.0",
 		logger:       oarklog.Default(),
 		fs:           filesystem,
+		notify:       true,
 		userProvider: userProvider,
 		credentialValidator: func(server *Server, r fs.AuthenticationRequest) (*fs.AuthenticationResponse, error) {
 			return server.userProvider.Login(r.User, r.Pass)
@@ -57,11 +59,21 @@ func defaultServer(filesystem interfaces2.Filesystem) *Server {
 	}
 }
 
-func New(filesystem interfaces2.Filesystem, opts ...func(*Server)) *Server {
+func New(filesystem interfaces.Filesystem, opts ...func(*Server)) *Server {
 	svr := defaultServer(filesystem)
+	return newServer(svr, opts...)
+}
+
+func NewWithNotify(filesystem interfaces.Filesystem, opts ...func(*Server)) *Server {
+	svr := defaultServer(NewFS(filesystem))
+	return newServer(svr, opts...)
+}
+
+func newServer(svr *Server, opts ...func(*Server)) *Server {
 	for _, o := range opts {
 		o(svr)
 	}
+	svr.fs.SetLogger(svr.logger)
 	return svr
 }
 
@@ -181,10 +193,10 @@ func (c *Server) AcceptInboundConnection(conn net.Conn, config *ssh.ServerConfig
 func (c *Server) createHandler(perm *ssh.Permissions) sftp.Handlers {
 	if c.fs == nil {
 		c.fs = afos.New(c.basePath)
+		c.fs.SetLogger(c.logger)
 	}
 	c.fs.SetPermissions(strings.Split(perm.Extensions["permissions"], ","))
 	c.fs.SetID(perm.Extensions["uuid"])
-	c.fs.SetLogger(c.logger)
 	return sftp.Handlers{
 		FileGet:  c.fs,
 		FilePut:  c.fs,

@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"fmt"
 	"os"
 
 	"github.com/oarkflow/ftp-server"
@@ -35,11 +34,7 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	callback := ftpserver.WithNotificationCallback(func(notification ftpserver.Notification) error {
-		fmt.Println("Notification", notification)
-		return nil
-	})
-	server := ftpserver.NewWithNotify(callback)
+	server := ftpserver.NewWithNotify()
 	for _, user := range users {
 		server.AddUser(user)
 	}

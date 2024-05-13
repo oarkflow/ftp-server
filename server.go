@@ -120,6 +120,7 @@ func (c *Server) Validate(conn ssh.ConnMetadata, pass []byte) (*ssh.Permissions,
 		"event", "Login",
 		"remote_addr", remoteAddr,
 		"client_version", clientVersion,
+		"fs_type", fst.Fs,
 	)
 	if c.notify && c.notificationCallback != nil {
 		c.notificationCallback(Notification{
@@ -128,6 +129,7 @@ func (c *Server) Validate(conn ssh.ConnMetadata, pass []byte) (*ssh.Permissions,
 			RemoteAddr:    remoteAddr,
 			Time:          now,
 			Event:         "Login",
+			FsType:        fst.Fs,
 		})
 	}
 	sshPerm := &ssh.Permissions{

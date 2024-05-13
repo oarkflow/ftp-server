@@ -11,6 +11,7 @@ import (
 	"sync"
 
 	"github.com/pkg/sftp"
+	"golang.org/x/crypto/ssh"
 
 	"github.com/oarkflow/ftp-server/log"
 
@@ -29,8 +30,10 @@ type Afos struct {
 	basePath      string
 	dataPath      string
 	permissions   []string
+	ctx           map[string]string
 	lock          sync.Mutex
 	readOnly      bool
+	sconn         *ssh.ServerConn
 }
 
 func defaultAfos(basePath string) *Afos {
@@ -63,8 +66,20 @@ func (f *Afos) SetPermissions(p []string) {
 	f.permissions = append(f.permissions, p...)
 }
 
+func (f *Afos) Permissions() []string {
+	return f.permissions
+}
+
 func (f *Afos) SetID(p string) {
 	f.id = p
+}
+
+func (f *Afos) SetContext(ctx map[string]string) {
+	f.ctx = ctx
+}
+
+func (f *Afos) Context() map[string]string {
+	return f.ctx
 }
 
 func (f *Afos) buildPath(p string) (string, error) {
@@ -76,6 +91,18 @@ func (f *Afos) buildPath(p string) (string, error) {
 
 func (f *Afos) SetLogger(logger log.Logger) {
 	f.logger = logger
+}
+
+func (f *Afos) Logger() log.Logger {
+	return f.logger
+}
+
+func (f *Afos) SetConn(sconn *ssh.ServerConn) {
+	f.sconn = sconn
+}
+
+func (f *Afos) Conn() *ssh.ServerConn {
+	return f.sconn
 }
 
 // Fileread creates a reader for a file on the system and returns the reader back.

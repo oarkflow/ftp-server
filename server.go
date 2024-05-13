@@ -11,6 +11,7 @@ import (
 	"os"
 	"path"
 	"strings"
+	"time"
 
 	"github.com/pkg/sftp"
 	"golang.org/x/crypto/ssh"
@@ -93,12 +94,15 @@ func (c *Server) Validate(conn ssh.ConnMetadata, pass []byte) (*ssh.Permissions,
 	if err != nil {
 		return nil, err
 	}
-
 	sshPerm := &ssh.Permissions{
 		Extensions: map[string]string{
-			"uuid":        resp.Server,
-			"user":        conn.User(),
-			"permissions": strings.Join(resp.Permissions, ","),
+			"uuid":           resp.Server,
+			"user":           conn.User(),
+			"remote_addr":    conn.RemoteAddr().String(),
+			"permissions":    strings.Join(resp.Permissions, ","),
+			"client_version": string(conn.ClientVersion()),
+			"server_version": string(conn.ServerVersion()),
+			"login_at":       time.Now().UTC().String(),
 		},
 	}
 
@@ -176,7 +180,7 @@ func (c *Server) AcceptInboundConnection(conn net.Conn, config *ssh.ServerConfig
 		}
 
 		// Create a new handler for the currently logged in user's server.
-		handlers := c.createHandler(sconn.Permissions)
+		handlers := c.createHandler(sconn)
 
 		// Create the server instance for the channel using the filesystem we created above.
 		server := sftp.NewRequestServer(channel, handlers)
@@ -190,13 +194,22 @@ func (c *Server) AcceptInboundConnection(conn net.Conn, config *ssh.ServerConfig
 // Creates a new SFTP handler for a given server. The directory argument should
 // be the base directory for a server. All actions done on the server will be
 // relative to that directory, and the user will not be able to escape out of it.
-func (c *Server) createHandler(perm *ssh.Permissions) sftp.Handlers {
+func (c *Server) createHandler(sconn *ssh.ServerConn) sftp.Handlers {
 	if c.fs == nil {
 		c.fs = afos.New(c.basePath)
 		c.fs.SetLogger(c.logger)
 	}
-	c.fs.SetPermissions(strings.Split(perm.Extensions["permissions"], ","))
-	c.fs.SetID(perm.Extensions["uuid"])
+	ext := sconn.Permissions.Extensions
+	ctx := make(map[string]string)
+	for key, val := range sconn.Permissions.Extensions {
+		if key != "permissions" {
+			ctx[key] = val
+		}
+	}
+	c.fs.SetConn(sconn)
+	c.fs.SetContext(ctx)
+	c.fs.SetPermissions(strings.Split(ext["permissions"], ","))
+	c.fs.SetID(ext["uuid"])
 	return sftp.Handlers{
 		FileGet:  c.fs,
 		FilePut:  c.fs,

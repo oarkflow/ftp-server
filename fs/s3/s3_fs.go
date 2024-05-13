@@ -17,6 +17,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/spf13/afero"
+	"golang.org/x/crypto/ssh"
 
 	"github.com/oarkflow/ftp-server/log"
 )
@@ -33,6 +34,8 @@ type Fs struct {
 	bucket      string // Bucket name
 	permissions []string
 	readOnly    bool
+	ctx         map[string]string
+	sconn       *ssh.ServerConn
 }
 
 // UploadedFileProperties defines all the set properties applied to future files

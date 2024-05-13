@@ -10,6 +10,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/pkg/sftp"
+	"golang.org/x/crypto/ssh"
 
 	"github.com/oarkflow/ftp-server/log"
 
@@ -17,6 +18,26 @@ import (
 	"github.com/oarkflow/ftp-server/interfaces"
 	"github.com/oarkflow/ftp-server/utils"
 )
+
+func (f *Fs) SetContext(ctx map[string]string) {
+	f.ctx = ctx
+}
+
+func (f *Fs) Context() map[string]string {
+	return f.ctx
+}
+
+func (f *Fs) Logger() log.Logger {
+	return f.logger
+}
+
+func (f *Fs) SetConn(sconn *ssh.ServerConn) {
+	f.sconn = sconn
+}
+
+func (f *Fs) Conn() *ssh.ServerConn {
+	return f.sconn
+}
 
 func (f *Fs) Fileread(request *sftp.Request) (io.ReaderAt, error) {
 	if !fs.Can(f.permissions, utils.PermissionFileReadContent) {
@@ -180,6 +201,10 @@ func (f *Fs) SetLogger(logger log.Logger) {
 
 func (f *Fs) SetPermissions(p []string) {
 	f.permissions = append(f.permissions, p...)
+}
+
+func (f *Fs) Permissions() []string {
+	return f.permissions
 }
 
 func (f *Fs) SetID(p string) {

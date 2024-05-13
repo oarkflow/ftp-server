@@ -6,16 +6,14 @@ import (
 	"os"
 
 	"github.com/oarkflow/ftp-server"
-	"github.com/oarkflow/ftp-server/fs/s3"
 	"github.com/oarkflow/ftp-server/models"
 )
 
 type config struct {
-	Address  string    `json:"address"`
-	Filepath string    `json:"files"`
-	Port     int       `json:"port"`
-	ReadOnly bool      `json:"readOnly"`
-	S3       s3.Option `json:"s3"`
+	Address  string `json:"address"`
+	Filepath string `json:"files"`
+	Port     int    `json:"port"`
+	ReadOnly bool   `json:"readOnly"`
 }
 
 func main() {

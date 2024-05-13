@@ -83,11 +83,16 @@ func (c *Server) AddUser(user models.User) {
 }
 
 func (c *Server) Validate(conn ssh.ConnMetadata, pass []byte) (*ssh.Permissions, error) {
+	now := time.Now().UTC()
+	user := conn.User()
+	clientVersion := string(conn.ClientVersion())
+	remoteAddr := conn.RemoteAddr().String()
+	sessionID := conn.SessionID()
 	resp, err := c.credentialValidator(c, fs.AuthenticationRequest{
-		User:          conn.User(),
+		User:          user,
 		Pass:          string(pass),
-		IP:            conn.RemoteAddr().String(),
-		SessionID:     conn.SessionID(),
+		IP:            remoteAddr,
+		SessionID:     sessionID,
 		ClientVersion: conn.ClientVersion(),
 	})
 
@@ -109,16 +114,31 @@ func (c *Server) Validate(conn ssh.ConnMetadata, pass []byte) (*ssh.Permissions,
 	} else {
 		useDefaultFS = "true"
 	}
+	c.logger.Info("User Authenticated",
+		"user", user,
+		"login_at", now.String(),
+		"event", "Login",
+		"remote_addr", remoteAddr,
+		"client_version", clientVersion,
+	)
+	if c.notify && c.notificationCallback != nil {
+		c.notificationCallback(Notification{
+			User:          user,
+			ClientVersion: clientVersion,
+			RemoteAddr:    remoteAddr,
+			Time:          now,
+			Event:         "Login",
+		})
+	}
 	sshPerm := &ssh.Permissions{
 		Extensions: map[string]string{
 			"uuid":           resp.Server,
-			"user":           conn.User(),
-			"remote_addr":    conn.RemoteAddr().String(),
+			"user":           user,
+			"remote_addr":    remoteAddr,
 			"filesystem":     filesystem,
 			"default_fs":     useDefaultFS,
-			"client_version": string(conn.ClientVersion()),
-			"server_version": string(conn.ServerVersion()),
-			"login_at":       time.Now().UTC().String(),
+			"client_version": clientVersion,
+			"login_at":       now.String(),
 		},
 	}
 	return sshPerm, nil

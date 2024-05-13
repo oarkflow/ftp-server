@@ -43,14 +43,12 @@ github.com/jmespath/go-jmespath v0.4.0 h1:BEgLn5cpjn8UN1mAw4NjwDrS35OdebyEtFe+9Y
 github.com/jmespath/go-jmespath v0.4.0/go.mod h1:T8mJZnbsbmF+m6zOOFylbeCJqk5+pHWvzYPziyZiYoo=
 github.com/jmespath/go-jmespath/internal/testify v1.5.1 h1:shLQSRRSCCPj3f2gpwzGwWFoC7ycTf1rcQZHOlsJ6N8=
 github.com/jmespath/go-jmespath/internal/testify v1.5.1/go.mod h1:L3OGu8Wl2/fWfCI6z80xFu9LTZmf1ZRjMHUOPmWr69U=
-github.com/klauspost/compress v1.17.8 h1:YcnTYrq7MikUT7k0Yb5eceMmALQPYBW/Xltxn0NAMnU=
-github.com/klauspost/compress v1.17.8/go.mod h1:Di0epgTjJY877eYKx5yC51cX2A2Vl2ibi7bDH9ttBbw=
 github.com/kr/fs v0.1.0 h1:Jskdu9ieNAYnjxsi0LbQp1ulIKZV1LAFgK1tWhpZgl8=
 github.com/kr/fs v0.1.0/go.mod h1:FFnZGqtBN9Gxj7eW1uZ42v5BccTP0vu6NEaFoC2HwRg=
+github.com/oarkflow/hash v0.0.0-20240513110640-a0ad5a00cf25 h1:yMhlxEQY5FcJuvYPHbRetSdo5D9k2y813ANCGZn3uas=
+github.com/oarkflow/hash v0.0.0-20240513110640-a0ad5a00cf25/go.mod h1:UAAfiVq41PtcR4dCH3HnaVaB5sl0y/o4OmN11R0ZSmA=
 github.com/oarkflow/log v1.0.77 h1:jIsFqjcoKaH4101XgpD+8lh8E9TU70FPLs/oLYTRZGA=
 github.com/oarkflow/log v1.0.77/go.mod h1:U/4chr1DyOiQvS6JiQpjYTCJhK7RGR8xrXPsGlouLzM=
-github.com/oarkflow/pkg v0.1.45 h1:FvNX4d77OgOAkE2/HGauA7uuJ2saeF2+QJOv76++4sg=
-github.com/oarkflow/pkg v0.1.45/go.mod h1:BC4A02h7nS203qhtci1pguFtE9mm3NA+6MqHK3NJ4hY=
 github.com/pkg/sftp v1.13.6 h1:JFZT4XbOU7l77xGSpOdW+pwIMqP044IyjXX6FGyEKFo=
 github.com/pkg/sftp v1.13.6/go.mod h1:tz1ryNURKu77RL+GuCzmoJYxQczL3wLNNpPWagdg4Qk=
 github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZbAQM=

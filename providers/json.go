@@ -5,7 +5,7 @@ import (
 	"math/big"
 	"sync"
 
-	"github.com/oarkflow/pkg/hash"
+	"github.com/oarkflow/hash"
 
 	"github.com/oarkflow/ftp-server/errs"
 	"github.com/oarkflow/ftp-server/fs"

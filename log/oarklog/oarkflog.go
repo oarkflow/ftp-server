@@ -4,6 +4,7 @@ package oarklog
 import (
 	"fmt"
 	"os"
+	"time"
 
 	oarkLog "github.com/oarkflow/log"
 
@@ -25,6 +26,9 @@ func Default() log.Logger {
 	}
 	writer := oarkLog.MultiEntryWriter(w)
 	oarkLog.DefaultLogger.Writer = &writer
+	oarkLog.DefaultLogger.EnableTracing = false
+	oarkLog.DefaultLogger.TimeLocation = time.UTC
+	oarkLog.DefaultLogger.TimeFormat = time.RFC3339
 	return &OarkLog{
 		logger: oarkLog.DefaultLogger,
 	}

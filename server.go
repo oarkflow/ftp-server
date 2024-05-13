@@ -84,6 +84,7 @@ func (c *Server) AddUser(user models.User) {
 
 func (c *Server) Validate(conn ssh.ConnMetadata, pass []byte) (*ssh.Permissions, error) {
 	now := time.Now().UTC()
+	nowString := now.Format(time.RFC3339)
 	user := conn.User()
 	clientVersion := string(conn.ClientVersion())
 	remoteAddr := conn.RemoteAddr().String()
@@ -116,7 +117,7 @@ func (c *Server) Validate(conn ssh.ConnMetadata, pass []byte) (*ssh.Permissions,
 	}
 	c.logger.Info("User Authenticated",
 		"user", user,
-		"login_at", now.String(),
+		"login_at", nowString,
 		"event", "Login",
 		"remote_addr", remoteAddr,
 		"client_version", clientVersion,
@@ -140,7 +141,7 @@ func (c *Server) Validate(conn ssh.ConnMetadata, pass []byte) (*ssh.Permissions,
 			"filesystem":     filesystem,
 			"default_fs":     useDefaultFS,
 			"client_version": clientVersion,
-			"login_at":       now.String(),
+			"login_at":       nowString,
 		},
 	}
 	return sshPerm, nil
@@ -157,7 +158,7 @@ func (c *Server) Initialize() error {
 		return err
 	}
 
-	c.logger.Info("sftp subsystem listening for connections", "host", c.address, "port", c.port)
+	c.logger.Info("Listening connections", "host", c.address, "port", c.port)
 
 	for {
 		conn, _ := listener.Accept()

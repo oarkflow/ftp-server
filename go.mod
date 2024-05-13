@@ -8,7 +8,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/feature/s3/manager v1.16.17
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.53.2
 	github.com/oarkflow/hash v0.0.0-20240513110640-a0ad5a00cf25
-	github.com/oarkflow/log v1.0.77
+	github.com/oarkflow/log v1.0.78
 	github.com/pkg/sftp v1.13.6
 	github.com/spf13/afero v1.11.0
 	golang.org/x/crypto v0.23.0

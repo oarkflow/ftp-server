@@ -54,7 +54,6 @@ const (
 type Integration string
 
 const (
-	FTP  Integration = "FTP"
 	SFTP Integration = "SFTP"
 	Mail Integration = "MAIL"
 )

@@ -21,7 +21,6 @@ import (
 	"github.com/oarkflow/ftp-server/providers"
 
 	"github.com/oarkflow/ftp-server/fs"
-	"github.com/oarkflow/ftp-server/interfaces"
 	"github.com/oarkflow/ftp-server/log/oarklog"
 	"github.com/oarkflow/ftp-server/models"
 	"github.com/oarkflow/ftp-server/utils"
@@ -29,7 +28,7 @@ import (
 
 type NotificationHandler func(notification Notification) error
 type Server struct {
-	userProvider         interfaces.UserProvider
+	userProvider         providers.UserProvider
 	logger               log.Logger
 	credentialValidator  func(server *Server, r fs.AuthenticationRequest) (*fs.AuthenticationResponse, error)
 	notificationCallback NotificationHandler

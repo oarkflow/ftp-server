@@ -2,7 +2,7 @@ package ftpserver
 
 import (
 	"github.com/oarkflow/ftp-server/fs"
-	interfaces2 "github.com/oarkflow/ftp-server/interfaces"
+	interfaces2 "github.com/oarkflow/ftp-server/providers"
 )
 
 func WithUserProvider(provider interfaces2.UserProvider) func(*Server) {

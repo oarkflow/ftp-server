@@ -7,3 +7,5 @@ __debug_bin*
 *.toml
 config.json
 users.json
+id_rsa
+id_rsa.pub

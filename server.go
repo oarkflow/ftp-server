@@ -6,6 +6,7 @@ import (
 	"crypto/x509"
 	"encoding/json"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -13,13 +14,13 @@ import (
 	"path"
 	"slices"
 	"time"
-
+	
 	"github.com/pkg/sftp"
 	"golang.org/x/crypto/ssh"
-
+	
 	"github.com/oarkflow/ftp-server/log"
 	"github.com/oarkflow/ftp-server/providers"
-
+	
 	"github.com/oarkflow/ftp-server/fs"
 	"github.com/oarkflow/ftp-server/log/oarklog"
 	"github.com/oarkflow/ftp-server/models"
@@ -49,6 +50,7 @@ func defaultServer() *Server {
 		sshPath:      ".ssh",
 		port:         2022,
 		privateKey:   "id_rsa",
+		publicKey:    "id_rsa.pub",
 		address:      "0.0.0.0",
 		logger:       oarklog.Default(),
 		notify:       true,
@@ -95,7 +97,7 @@ func (c *Server) Validate(conn ssh.ConnMetadata, pass []byte) (*ssh.Permissions,
 		SessionID:     sessionID,
 		ClientVersion: conn.ClientVersion(),
 	})
-
+	
 	if err != nil {
 		return nil, err
 	}
@@ -156,9 +158,9 @@ func (c *Server) Initialize() error {
 	if err != nil {
 		return err
 	}
-
+	
 	c.logger.Info("Listening connections", "host", c.address, "port", c.port)
-
+	
 	for {
 		conn, _ := listener.Accept()
 		if conn != nil {
@@ -238,8 +240,8 @@ func (c *Server) createHandler(sconn *ssh.ServerConn) (sftp.Handlers, error) {
 	return sftp.Handlers{FileGet: fst, FilePut: fst, FileCmd: fst, FileList: fst}, nil
 }
 
-func (c *Server) getSSHPath() string {
-	return path.Join(c.basePath, c.sshPath, c.privateKey)
+func (c *Server) getSSHPath(file string) string {
+	return path.Join(c.basePath, c.sshPath, file)
 }
 
 func (c *Server) setupSSH() (*ssh.ServerConfig, error) {
@@ -248,26 +250,30 @@ func (c *Server) setupSSH() (*ssh.ServerConfig, error) {
 		MaxAuthTries:     6,
 		PasswordCallback: c.Validate,
 	}
-	if _, err := os.Stat(c.getSSHPath()); os.IsNotExist(err) {
+	if _, err := os.Stat(c.getSSHPath(c.privateKey)); os.IsNotExist(err) {
 		if err := c.generatePrivateKey(); err != nil {
 			return nil, err
 		}
 	} else if err != nil {
 		return nil, err
 	}
-
-	privateBytes, err := os.ReadFile(c.getSSHPath())
+	
+	privateBytes, err := os.ReadFile(c.getSSHPath(c.privateKey))
 	if err != nil {
 		return nil, err
 	}
-
+	
 	private, err := ssh.ParsePrivateKey(privateBytes)
 	if err != nil {
 		return nil, err
 	}
-
+	
 	// Add our private key to the server configuration.
 	config.AddHostKey(private)
+	/*err = c.generatePublicKey(privateBytes)
+	if err != nil {
+		return nil, err
+	}*/
 	return config, nil
 }
 
@@ -277,25 +283,56 @@ func (c *Server) generatePrivateKey() error {
 	if err != nil {
 		return err
 	}
-
+	
 	if err := os.MkdirAll(path.Join(c.basePath, c.sshPath), 0755); err != nil {
 		return err
 	}
-
-	o, err := os.OpenFile(c.getSSHPath(), os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0600)
+	
+	o, err := os.OpenFile(c.getSSHPath(c.privateKey), os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0600)
 	if err != nil {
 		return err
 	}
 	defer o.Close()
-
+	
 	pkey := &pem.Block{
 		Type:  "RSA PRIVATE KEY",
 		Bytes: x509.MarshalPKCS1PrivateKey(key),
 	}
+	return pem.Encode(o, pkey)
+}
 
-	if err := pem.Encode(o, pkey); err != nil {
+// GetPublicKey extracts the public key from an ssh.Signer (typically a private key)
+func (c *Server) generatePublicKey(privKey []byte) error {
+	_, err := os.Stat(c.getSSHPath(c.publicKey))
+	if err != nil {
+		if !os.IsNotExist(err) {
+			return err
+		}
+	}
+	
+	block, _ := pem.Decode(privKey)
+	if block == nil || block.Type != "RSA PRIVATE KEY" {
+		return errors.New("failed to decode PEM block containing public key")
+	}
+	key, err := x509.ParsePKCS1PrivateKey(block.Bytes)
+	if err != nil {
 		return err
 	}
-
-	return nil
+	
+	// publicKeyDer := x509.MarshalPKCS1PublicKey(&key.PublicKey)
+	publicKeyDer, err := x509.MarshalPKIXPublicKey(&key.PublicKey)
+	if err != nil {
+		return err
+	}
+	o, err := os.OpenFile(c.getSSHPath(c.publicKey), os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0600)
+	if err != nil {
+		return err
+	}
+	defer o.Close()
+	pubKeyBlock := &pem.Block{
+		Type:    "PUBLIC KEY",
+		Headers: nil,
+		Bytes:   publicKeyDer,
+	}
+	return pem.Encode(o, pubKeyBlock)
 }

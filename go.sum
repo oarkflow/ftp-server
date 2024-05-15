@@ -45,6 +45,8 @@ github.com/jmespath/go-jmespath/internal/testify v1.5.1 h1:shLQSRRSCCPj3f2gpwzGw
 github.com/jmespath/go-jmespath/internal/testify v1.5.1/go.mod h1:L3OGu8Wl2/fWfCI6z80xFu9LTZmf1ZRjMHUOPmWr69U=
 github.com/kr/fs v0.1.0 h1:Jskdu9ieNAYnjxsi0LbQp1ulIKZV1LAFgK1tWhpZgl8=
 github.com/kr/fs v0.1.0/go.mod h1:FFnZGqtBN9Gxj7eW1uZ42v5BccTP0vu6NEaFoC2HwRg=
+github.com/oarkflow/bitwise v0.0.0-20240515075734-48c12e6f1ea8 h1:taAv26A4NyuisyVxVkdmkOUfOEpORMpAH7thbZKryZA=
+github.com/oarkflow/bitwise v0.0.0-20240515075734-48c12e6f1ea8/go.mod h1:biIVlZmpEXQFY4qqetW8YArF+SG6CSR+VNktt6yQlcE=
 github.com/oarkflow/hash v0.0.0-20240513110640-a0ad5a00cf25 h1:yMhlxEQY5FcJuvYPHbRetSdo5D9k2y813ANCGZn3uas=
 github.com/oarkflow/hash v0.0.0-20240513110640-a0ad5a00cf25/go.mod h1:UAAfiVq41PtcR4dCH3HnaVaB5sl0y/o4OmN11R0ZSmA=
 github.com/oarkflow/log v1.0.78 h1:o8IMQ6esXIb/Dk+wTe1uDl1qPmsS4Z/89ERY5eQx/Dk=

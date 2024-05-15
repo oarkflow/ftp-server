@@ -15,7 +15,6 @@ import (
 	"github.com/oarkflow/ftp-server/log"
 
 	"github.com/oarkflow/ftp-server/fs"
-	"github.com/oarkflow/ftp-server/utils"
 )
 
 func (f *Fs) SetContext(ctx map[string]string) {
@@ -39,7 +38,7 @@ func (f *Fs) Conn() *ssh.ServerConn {
 }
 
 func (f *Fs) Fileread(request *sftp.Request) (io.ReaderAt, error) {
-	if !fs.Can(f.permissions, utils.PermissionFileReadContent) {
+	if !fs.Can(f.permissions, fs.ReadContent) {
 		return nil, sftp.ErrSshFxPermissionDenied
 	}
 	switch request.Method {
@@ -78,7 +77,7 @@ func (f *Fs) Filecmd(request *sftp.Request) error {
 	target := request.Target
 	switch request.Method {
 	case "Setstat":
-		if !fs.Can(f.permissions, utils.PermissionFileUpdate) {
+		if !fs.Can(f.permissions, fs.Update) {
 			return sftp.ErrSshFxPermissionDenied
 		}
 
@@ -100,7 +99,7 @@ func (f *Fs) Filecmd(request *sftp.Request) error {
 		}
 		return nil
 	case "Rename":
-		if !fs.Can(f.permissions, utils.PermissionFileUpdate) {
+		if !fs.Can(f.permissions, fs.Update) {
 			return sftp.ErrSshFxPermissionDenied
 		}
 
@@ -115,7 +114,7 @@ func (f *Fs) Filecmd(request *sftp.Request) error {
 
 		break
 	case "Rmdir":
-		if !fs.Can(f.permissions, utils.PermissionFileDelete) {
+		if !fs.Can(f.permissions, fs.Delete) {
 			return sftp.ErrSshFxPermissionDenied
 		}
 
@@ -126,7 +125,7 @@ func (f *Fs) Filecmd(request *sftp.Request) error {
 
 		return sftp.ErrSshFxOk
 	case "Mkdir":
-		if !fs.Can(f.permissions, utils.PermissionFileCreate) {
+		if !fs.Can(f.permissions, fs.Create) {
 			return sftp.ErrSshFxPermissionDenied
 		}
 
@@ -137,7 +136,7 @@ func (f *Fs) Filecmd(request *sftp.Request) error {
 
 		break
 	case "Remove":
-		if !fs.Can(f.permissions, utils.PermissionFileDelete) {
+		if !fs.Can(f.permissions, fs.Delete) {
 			return sftp.ErrSshFxPermissionDenied
 		}
 
@@ -159,7 +158,7 @@ func (f *Fs) Filelist(request *sftp.Request) (sftp.ListerAt, error) {
 	p := request.Filepath
 	switch request.Method {
 	case "List":
-		if !fs.Can(f.permissions, utils.PermissionFileRead) {
+		if !fs.Can(f.permissions, fs.Read) {
 			return nil, sftp.ErrSshFxPermissionDenied
 		}
 		file := NewFile(f, p)
@@ -171,7 +170,7 @@ func (f *Fs) Filelist(request *sftp.Request) (sftp.ListerAt, error) {
 
 		return fs.ListerAt(files), nil
 	case "Stat":
-		if !fs.Can(f.permissions, utils.PermissionFileRead) {
+		if !fs.Can(f.permissions, fs.Read) {
 			return nil, sftp.ErrSshFxPermissionDenied
 		}
 
@@ -199,11 +198,11 @@ func (f *Fs) SetLogger(logger log.Logger) {
 }
 
 func (f *Fs) SetPermissions(p []string) {
-	f.permissions = append(f.permissions, p...)
+	f.permissions = fs.Serialize(p)
 }
 
 func (f *Fs) Permissions() []string {
-	return f.permissions
+	return fs.Deserialize(f.permissions)
 }
 
 func (f *Fs) SetID(p string) {

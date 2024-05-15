@@ -32,7 +32,7 @@ type Fs struct {
 	client      *s3.Client
 	id          string
 	bucket      string // Bucket name
-	permissions []string
+	permissions int64
 	readOnly    bool
 	ctx         map[string]string
 	sconn       *ssh.ServerConn

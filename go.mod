@@ -7,6 +7,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/credentials v1.17.13
 	github.com/aws/aws-sdk-go-v2/feature/s3/manager v1.16.17
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.53.2
+	github.com/oarkflow/bitwise v0.0.0-20240515075734-48c12e6f1ea8
 	github.com/oarkflow/hash v0.0.0-20240513110640-a0ad5a00cf25
 	github.com/oarkflow/log v1.0.78
 	github.com/pkg/sftp v1.13.6

@@ -17,7 +17,6 @@ import (
 
 	"github.com/oarkflow/ftp-server/errs"
 	"github.com/oarkflow/ftp-server/fs"
-	"github.com/oarkflow/ftp-server/utils"
 )
 
 // Afos ... A file system exposed to a user.
@@ -28,7 +27,7 @@ type Afos struct {
 	id            string
 	basePath      string
 	dataPath      string
-	permissions   []string
+	permissions   int64
 	ctx           map[string]string
 	lock          sync.Mutex
 	readOnly      bool
@@ -62,11 +61,11 @@ func New(basePath string, opts ...func(*Afos)) fs.FS {
 }
 
 func (f *Afos) SetPermissions(p []string) {
-	f.permissions = append(f.permissions, p...)
+	f.permissions = fs.Serialize(p)
 }
 
 func (f *Afos) Permissions() []string {
-	return f.permissions
+	return fs.Deserialize(f.permissions)
 }
 
 func (f *Afos) SetID(p string) {
@@ -109,7 +108,7 @@ func (f *Afos) Fileread(request *sftp.Request) (io.ReaderAt, error) {
 	// Check first if the user can actually open and view a file. This permission is named
 	// really poorly, but it is checking if they can read. There is an addition permission,
 	// "save-files" which determines if they can write that file.
-	if !fs.Can(f.permissions, utils.PermissionFileReadContent) {
+	if !fs.Can(f.permissions, fs.ReadContent) {
 		return nil, sftp.ErrSshFxPermissionDenied
 	}
 
@@ -160,7 +159,7 @@ func (f *Afos) Filewrite(request *sftp.Request) (io.WriterAt, error) {
 	if os.IsNotExist(statErr) {
 		// This is a different pathway than just editing an existing file. If it doesn't exist already
 		// we need to determine if this user has permission to create files.
-		if !fs.Can(f.permissions, utils.PermissionFileCreate) {
+		if !fs.Can(f.permissions, fs.Create) {
 			return nil, sftp.ErrSshFxPermissionDenied
 		}
 
@@ -195,7 +194,7 @@ func (f *Afos) Filewrite(request *sftp.Request) (io.WriterAt, error) {
 	// goal with the file is going to be.
 	//
 	// But first, check that the user has permission to save modified files.
-	if !fs.Can(f.permissions, utils.PermissionFileUpdate) {
+	if !fs.Can(f.permissions, fs.Update) {
 		return nil, sftp.ErrSshFxPermissionDenied
 	}
 
@@ -243,7 +242,7 @@ func (f *Afos) Filecmd(request *sftp.Request) error {
 
 	switch request.Method {
 	case "Setstat":
-		if !fs.Can(f.permissions, utils.PermissionFileUpdate) {
+		if !fs.Can(f.permissions, fs.Update) {
 			return sftp.ErrSshFxPermissionDenied
 		}
 
@@ -265,7 +264,7 @@ func (f *Afos) Filecmd(request *sftp.Request) error {
 		}
 		return nil
 	case "Rename":
-		if !fs.Can(f.permissions, utils.PermissionFileUpdate) {
+		if !fs.Can(f.permissions, fs.Update) {
 			return sftp.ErrSshFxPermissionDenied
 		}
 
@@ -280,7 +279,7 @@ func (f *Afos) Filecmd(request *sftp.Request) error {
 
 		break
 	case "Rmdir":
-		if !fs.Can(f.permissions, utils.PermissionFileDelete) {
+		if !fs.Can(f.permissions, fs.Delete) {
 			return sftp.ErrSshFxPermissionDenied
 		}
 
@@ -291,7 +290,7 @@ func (f *Afos) Filecmd(request *sftp.Request) error {
 
 		return sftp.ErrSshFxOk
 	case "Mkdir":
-		if !fs.Can(f.permissions, utils.PermissionFileCreate) {
+		if !fs.Can(f.permissions, fs.Create) {
 			return sftp.ErrSshFxPermissionDenied
 		}
 
@@ -302,7 +301,7 @@ func (f *Afos) Filecmd(request *sftp.Request) error {
 
 		break
 	case "Symlink":
-		if !fs.Can(f.permissions, utils.PermissionFileCreate) {
+		if !fs.Can(f.permissions, fs.Create) {
 			return sftp.ErrSshFxPermissionDenied
 		}
 
@@ -316,7 +315,7 @@ func (f *Afos) Filecmd(request *sftp.Request) error {
 
 		break
 	case "Remove":
-		if !fs.Can(f.permissions, utils.PermissionFileDelete) {
+		if !fs.Can(f.permissions, fs.Delete) {
 			return sftp.ErrSshFxPermissionDenied
 		}
 
@@ -345,7 +344,7 @@ func (f *Afos) Filelist(request *sftp.Request) (sftp.ListerAt, error) {
 
 	switch request.Method {
 	case "List":
-		if !fs.Can(f.permissions, utils.PermissionFileRead) {
+		if !fs.Can(f.permissions, fs.Read) {
 			return nil, sftp.ErrSshFxPermissionDenied
 		}
 
@@ -356,7 +355,7 @@ func (f *Afos) Filelist(request *sftp.Request) (sftp.ListerAt, error) {
 		}
 		return fs.ListerAt(files), nil
 	case "Stat":
-		if !fs.Can(f.permissions, utils.PermissionFileRead) {
+		if !fs.Can(f.permissions, fs.Read) {
 			return nil, sftp.ErrSshFxPermissionDenied
 		}
 

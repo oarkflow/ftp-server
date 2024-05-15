@@ -3,7 +3,8 @@ package fs
 import (
 	"io"
 	"os"
-	"slices"
+
+	"github.com/oarkflow/bitwise"
 
 	"github.com/oarkflow/ftp-server/models"
 )
@@ -42,14 +43,35 @@ func (l ListerAt) ListAt(f []os.FileInfo, offset int64) (int, error) {
 	return n, nil
 }
 
+var factory bitwise.Perman
+
+const (
+	// Read ... Permission to read a file.
+	Read = "read"
+	// ReadContent ... Permission to read the contents of a file.
+	ReadContent = "read-content"
+	// Create ... Permission to create a file.
+	Create = "create"
+	// Update ... Permission to update a file.
+	Update = "update"
+	// Delete ... Permission to delete a file.
+	Delete = "delete"
+)
+
+func init() {
+	factory = bitwise.Factory([]string{Read, ReadContent, Create, Update, Delete})
+}
+
 // Can - Determines if a user has permission to perform a specific action on the SFTP server. These
 // permissions are defined and returned by the Panel API.
-func Can(permissions []string, permission string) bool {
-	// Server owners and super admins have their permissions returned as '[*]' via the Panel
-	// API, so for the sake of speed do an initial check for that before iterating over the
-	// entire array of permissions.
-	if len(permissions) == 1 && permissions[0] == "*" {
-		return true
-	}
-	return slices.Contains(permissions, permission)
+func Can(permissions int64, permission string) bool {
+	return factory.Has(permissions, permission)
+}
+
+func Serialize(perm []string) int64 {
+	return factory.Serialize(perm)
+}
+
+func Deserialize(perm int64) []string {
+	return factory.Deserialize(perm)
 }

@@ -12,7 +12,7 @@ func WithDataPath(val string) func(server *Afos) {
 
 func WithPermissions(val []string) func(server *Afos) {
 	return func(o *Afos) {
-		o.permissions = val
+		o.permissions = fs.Serialize(val)
 	}
 }
 
